@@ -1,0 +1,180 @@
+version: '3.8'
+
+# ==============================================================================
+# ORQUESTADOR GENERAL LOCAL - ARQUITECTURA 2 COMPLETA
+# Cementerio General Comuna de Los Ángeles (Licitación 2411-8-LE25)
+# Permite levantar el stack completo simulando las 7 VMs en una sola red Docker.
+# ==============================================================================
+
+networks:
+  red_cementerio:
+    name: red_cementerio_cluster
+    driver: bridge
+
+volumes:
+  pgdata_primary:
+    name: pgdata_primary_volume
+  pgdata_replica:
+    name: pgdata_replica_volume
+  backups_storage:
+    name: backups_cementerio_volume
+
+services:
+  # ============================================================================
+  # CAPA 1: INGRESS / BALANCEO WEB (VM 1)
+  # ============================================================================
+  vm1_haproxy_web:
+    image: haproxy:2.8-alpine
+    container_name: vm1_haproxy_web
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./vms/vm-1-haproxy-web/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm2_frontend_app1
+      - vm3_frontend_app2
+
+  # ============================================================================
+  # CAPA 2: SERVIDOR DE APLICACIONES 1 (VM 2)
+  # ============================================================================
+  vm2_frontend_app1:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vm2_frontend_app1
+    restart: always
+    volumes:
+      - ./vms/vm-2-app-principal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8081:80"
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm2_backend_app1
+
+  vm2_backend_app1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vm2_backend_app1
+    restart: always
+    env_file:
+      - ./vms/vm-2-app-principal/.env
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm4_haproxy_db
+
+  # ============================================================================
+  # CAPA 2: SERVIDOR DE APLICACIONES 2 (VM 3 - RÉPLICA)
+  # ============================================================================
+  vm3_frontend_app2:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vm3_frontend_app2
+    restart: always
+    volumes:
+      - ./vms/vm-3-app-replica/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8082:80"
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm3_backend_app2
+
+  vm3_backend_app2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vm3_backend_app2
+    restart: always
+    env_file:
+      - ./vms/vm-3-app-replica/.env
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm4_haproxy_db
+
+  # ============================================================================
+  # CAPA 3: BALANCEO DE BASE DE DATOS (VM 4)
+  # ============================================================================
+  vm4_haproxy_db:
+    image: haproxy:2.8-alpine
+    container_name: vm4_haproxy_db
+    restart: always
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    volumes:
+      - ./vms/vm-4-haproxy-db/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm5_db_primaria
+
+  # ============================================================================
+  # CAPA 4: BASE DE DATOS 1 - PRIMARIO (VM 5)
+  # ============================================================================
+  vm5_db_primaria:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: vm5_db_primaria
+    restart: always
+    env_file:
+      - ./vms/vm-5-db-primaria/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./vms/vm-5-db-primaria/init:/docker-entrypoint-initdb.d:ro
+      - pgdata_primary:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cementerio_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - red_cementerio
+
+  # ============================================================================
+  # CAPA 4: BASE DE DATOS 2 - RÉPLICA (VM 6)
+  # ============================================================================
+  vm6_db_replica:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: vm6_db_replica
+    restart: always
+    env_file:
+      - ./vms/vm-6-db-replica/.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_replica:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cementerio_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - red_cementerio
+
+  # ============================================================================
+  # CAPA 5: SERVIDOR DE RESPALDO (VM 7)
+  # ============================================================================
+  vm7_backup_server:
+    build:
+      context: ./vms/vm-7-backup-server
+      dockerfile: Dockerfile
+    container_name: vm7_backup_server
+    restart: always
+    env_file:
+      - ./vms/vm-7-backup-server/.env
+    volumes:
+      - backups_storage:/backups
+    networks:
+      - red_cementerio
+    depends_on:
+      - vm5_db_primaria

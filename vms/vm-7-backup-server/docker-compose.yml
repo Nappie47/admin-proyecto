@@ -1,0 +1,30 @@
+version: '3.8'
+
+# ==========================================================
+# VM 7: SERVIDOR DE RESPALDO DE DATOS (BACKUPS AUTOMÁTICOS)
+# Capa 5 de la Arquitectura 2
+# En GCP: Instancia e2-micro (Spot) en Subred DB (IP 10.0.3.13)
+# ==========================================================
+
+services:
+  backup-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vm7_backup_server
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - backups_storage:/backups
+    networks:
+      - red_cementerio
+
+volumes:
+  backups_storage:
+    name: backups_cementerio_volume
+
+networks:
+  red_cementerio:
+    external: true
+    name: red_cementerio_cluster

@@ -1,0 +1,24 @@
+version: '3.8'
+
+# ==========================================================
+# VM 1: BALANCEADOR DE CARGA WEB (INGRESS HTTP/HTTPS)
+# Capa 1 de la Arquitectura 2
+# En GCP: Instancia e2-micro en Subred DMZ (IP Pública)
+# ==========================================================
+
+services:
+  haproxy-web:
+    image: haproxy:2.8-alpine
+    container_name: vm1_haproxy_web
+    restart: always
+    ports:
+      - "80:80"        # Puerto web público de entrada
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - red_cementerio
+
+networks:
+  red_cementerio:
+    external: true
+    name: red_cementerio_cluster

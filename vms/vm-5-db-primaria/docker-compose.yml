@@ -1,0 +1,37 @@
+version: '3.8'
+
+# ==========================================================
+# VM 5: SERVIDOR DE BASE DE DATOS 1 (PRIMARIO)
+# Capa 4 de la Arquitectura 2: PostgreSQL 16 + PostGIS
+# En GCP: Instancia e2-small en Subred DB (IP 10.0.3.11)
+# ==========================================================
+
+services:
+  db-primary:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: vm5_db_primaria
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - pgdata_primary:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cementerio_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - red_cementerio
+
+volumes:
+  pgdata_primary:
+    name: pgdata_primary_volume
+
+networks:
+  red_cementerio:
+    external: true
+    name: red_cementerio_cluster

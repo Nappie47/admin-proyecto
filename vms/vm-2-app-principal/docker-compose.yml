@@ -1,0 +1,41 @@
+version: '3.8'
+
+# ==========================================================
+# VM 2: SERVIDOR DE APLICACIONES 1 (PRINCIPAL)
+# Capa 2 de la Arquitectura 2
+# En GCP: Instancia e2-small en Subred App (IP 10.0.2.11)
+# ==========================================================
+
+services:
+  # 1. Frontend Web (React + Leaflet) servido por NGINX
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: vm2_frontend_app1
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8081:80"   # Puerto expuesto para prueba directa en PC
+    networks:
+      - red_cementerio
+    depends_on:
+      - backend
+
+  # 2. Backend REST API (Python + Flask + Gunicorn)
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: vm2_backend_app1
+    restart: always
+    env_file:
+      - .env
+    networks:
+      - red_cementerio
+
+networks:
+  red_cementerio:
+    external: true
+    name: red_cementerio_cluster
