@@ -7,7 +7,7 @@ set -e
 
 echo "[PASO 1/6] Actualizando e instalando paquetes..."
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3 python3-pip python3-venv libpq-dev git nginx curl nodejs npm
+sudo apt install -y python3 python3-pip python3-venv python3-psycopg2 libpq-dev git nginx curl nodejs npm
 
 echo "[PASO 2/6] Descargando código desde la rama unidad-1..."
 rm -rf /tmp/admin-proyecto
@@ -17,7 +17,7 @@ echo "[PASO 3/6] Desplegando Backend Flask en /var/www/cementerio-backend..."
 sudo mkdir -p /var/www/cementerio-backend
 sudo cp -r /tmp/admin-proyecto/backend/* /var/www/cementerio-backend/
 cd /var/www/cementerio-backend
-python3 -m venv venv
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
 pip install -r requirements.txt gunicorn
 
