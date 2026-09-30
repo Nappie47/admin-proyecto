@@ -33,7 +33,12 @@ export const sepulturaService = {
 
 export const patioService = {
   list: () => api.get('/patios'),
+  get: (id) => api.get(`/patios/${id}`),
   geojson: () => api.get('/patios/geojson'),
+  create: (data) => api.post('/patios', data),
+  update: (id, data) => api.put(`/patios/${id}`, data),
+  delete: (id) => api.delete(`/patios/${id}`),
+  bootstrap: () => api.post('/patios/bootstrap'),
 };
 
 export const mausoleoService = {

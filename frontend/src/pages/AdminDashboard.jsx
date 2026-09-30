@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Layers, Landmark, BarChart2, Settings, Plus, Search, 
-  RotateCcw, Edit2, Trash2, CheckCircle2, AlertTriangle, ShieldCheck, UserPlus
+  RotateCcw, Edit2, Trash2, CheckCircle2, AlertTriangle, ShieldCheck, UserPlus,
+  Map, Database, Sparkles, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { sepulturaService, userService, mausoleoService } from '../services/api';
+import { sepulturaService, userService, mausoleoService, patioService } from '../services/api';
 import { GraveModal } from '../components/GraveModal';
 import { UserModal } from '../components/UserModal';
 
@@ -34,6 +35,10 @@ export const AdminDashboard = ({ setActivePage }) => {
   // Users State (RF03)
   const [usersList, setUsersList] = useState([]);
 
+  // Patios State
+  const [patiosList, setPatiosList] = useState([]);
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
+
   // Modals state
   const [isGraveModalOpen, setIsGraveModalOpen] = useState(false);
   const [editingGrave, setEditingGrave] = useState(null);
@@ -51,6 +56,18 @@ export const AdminDashboard = ({ setActivePage }) => {
       }
     } catch (err) {
       console.error('Error cargando estadísticas:', err);
+    }
+  };
+
+  // Load patios
+  const fetchPatios = async () => {
+    try {
+      const res = await patioService.list();
+      if (res.data.success) {
+        setPatiosList(res.data.patios);
+      }
+    } catch (err) {
+      console.error('Error cargando patios:', err);
     }
   };
 
@@ -91,8 +108,40 @@ export const AdminDashboard = ({ setActivePage }) => {
     }
   };
 
+  const handleDeletePatio = async (id, numero) => {
+    if (!window.confirm(`¿Está seguro de eliminar el Patio ${numero}? Se eliminará de la base de datos PostgreSQL.`)) return;
+    try {
+      await patioService.delete(id);
+      setNotification({ type: 'success', message: `Patio ${numero} eliminado exitosamente.` });
+      fetchPatios();
+      fetchStats();
+    } catch (err) {
+      setNotification({ type: 'error', message: err.response?.data?.error || 'Error eliminando patio' });
+    }
+  };
+
+  const handleBootstrap = async () => {
+    if (!window.confirm('¿Desea inicializar los 5 Patios Oficiales y Usuario Admin en PostgreSQL (10.0.3.10:5000)?')) return;
+    setIsBootstrapping(true);
+    try {
+      const res = await patioService.bootstrap();
+      if (res.data.success) {
+        setNotification({ type: 'success', message: '¡Base de datos poblada exitosamente en 10.0.3.10:5000!' });
+        fetchPatios();
+        fetchStats();
+        fetchSepulturas(1);
+        if (isAdmin) fetchUsers();
+      }
+    } catch (err) {
+      setNotification({ type: 'error', message: err.response?.data?.error || 'Error poblando base de datos' });
+    } finally {
+      setIsBootstrapping(false);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchPatios();
     fetchSepulturas(1);
     if (isAdmin) fetchUsers();
   }, [filterPatio, filterTipo, filterEstado]);
@@ -262,6 +311,22 @@ export const AdminDashboard = ({ setActivePage }) => {
           }}
         >
           Sepulturas
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('patios'); fetchPatios(); }}
+          style={{
+            padding: '0.6rem 1.25rem',
+            borderRadius: '8px',
+            border: 'none',
+            backgroundColor: activeTab === 'patios' ? '#2d6a4f' : 'transparent',
+            color: activeTab === 'patios' ? 'white' : '#64748b',
+            fontWeight: '600',
+            fontSize: '0.88rem',
+            cursor: 'pointer'
+          }}
+        >
+          Patios Topográficos ({patiosList.length})
         </button>
 
         {isAdmin && (
@@ -459,6 +524,124 @@ export const AdminDashboard = ({ setActivePage }) => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Patios Tab (Límites Satelitales y Catastro) */}
+      {activeTab === 'patios' && (
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.75rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0f2d1e', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Database size={20} color="#2d6a4f" />
+                Patios Topográficos y Límites
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
+                Catastro de sectores perimetrales. Conexión directa a PostgreSQL (10.0.3.10:5000).
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={handleBootstrap}
+                disabled={isBootstrapping}
+                className="btn-secondary"
+                style={{ fontSize: '0.84rem' }}
+              >
+                {isBootstrapping ? (
+                  <>
+                    <RefreshCw size={15} className="animate-spin" />
+                    Poblando en 10.0.3.10:5000...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={15} color="#16a34a" />
+                    Poblar 5 Patios & Admin en DB
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setActivePage({ name: 'map' })}
+                className="btn-primary"
+                style={{ fontSize: '0.84rem' }}
+              >
+                <Map size={16} />
+                Abrir Editor Satelital en Mapa
+              </button>
+            </div>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                <th style={{ padding: '0.75rem 1rem' }}>Patio</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Nombre del Sector</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Superficie</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Sepulturas</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Límites SIG</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patiosList.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                    No se han registrado patios en la base de datos.<br />
+                    Haz clic en <strong>"Poblar 5 Patios & Admin en DB"</strong> o abre el Editor en el Mapa.
+                  </td>
+                </tr>
+              ) : (
+                patiosList.map((p) => (
+                  <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '0.85rem 1rem', fontWeight: '700' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ width: '14px', height: '14px', borderRadius: '4px', backgroundColor: p.color_hex || '#2d6a4f' }} />
+                        Patio {p.numero}
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <div style={{ fontWeight: '600', color: '#0f2d1e' }}>{p.nombre}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.descripcion || 'Sin descripción'}</div>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem', color: '#475569' }}>
+                      {p.superficie_m2 ? `${p.superficie_m2} m²` : 'N/A'}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <span className="badge-status ocupada">{p.total_sepulturas || 0} registradas</span>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      {p.geometry ? (
+                        <span style={{ color: '#166534', fontWeight: '600', fontSize: '0.8rem' }}>✓ Delimitado (Polígono)</span>
+                      ) : (
+                        <span style={{ color: '#dc2626', fontSize: '0.8rem' }}>Sin geometría</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                        <button
+                          onClick={() => setActivePage({ name: 'map' })}
+                          title="Editar en el mapa interactivo"
+                          className="btn-secondary"
+                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.78rem' }}
+                        >
+                          <Map size={14} />
+                          Editar en Mapa
+                        </button>
+                        <button
+                          onClick={() => handleDeletePatio(p.id, p.numero)}
+                          title="Eliminar patio de PostgreSQL"
+                          style={{ background: 'none', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.35rem', cursor: 'pointer', color: '#dc2626' }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
