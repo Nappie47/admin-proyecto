@@ -282,6 +282,8 @@ def bootstrap_database():
         # 5. Mausoleos Patrimoniales
         maus_count = MausoleoHistorico.query.count()
         if maus_count == 0:
+            patio_1 = Patio.query.filter_by(numero=1).first()
+            p1_id = patio_1.id if patio_1 else None
             m1 = MausoleoHistorico(
                 nombre="Mausoleo de la Familia Rivas",
                 familia="Familia Rivas",
@@ -290,7 +292,7 @@ def bootstrap_database():
                 estilo_arquitectonico="Neoclásico Republicano",
                 resena_historica="Construido en 1933 con mármol travertino y ornamentación en bronce.",
                 foto_url="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
-                patio_numero=1,
+                patio_id=p1_id,
                 latitud=-37.47225,
                 longitud=-72.32350,
                 destacado=True
@@ -303,7 +305,7 @@ def bootstrap_database():
                 estilo_arquitectonico="Clásico Monumental",
                 resena_historica="Monumento funerario en honor a los primeros colonizadores del siglo XIX.",
                 foto_url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80",
-                patio_numero=1,
+                patio_id=p1_id,
                 latitud=-37.47200,
                 longitud=-72.32380,
                 destacado=True
