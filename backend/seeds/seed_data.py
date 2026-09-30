@@ -8,9 +8,17 @@ from models.patio import Patio
 from models.sepultura import Sepultura
 from models.mausoleo import MausoleoHistorico
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def run_seed():
     app = create_app()
     with app.app_context():
+        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        # Ocultar password en el log
+        safe_uri = db_uri.split('@')[-1] if '@' in db_uri else db_uri
+        print(f"[INFO] Conectando a Base de Datos: {safe_uri}")
         print("[INFO] Iniciando poblamiento de base de datos...")
         db.create_all()
 
