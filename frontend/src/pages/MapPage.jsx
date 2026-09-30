@@ -49,6 +49,39 @@ const iconMantenimiento = createCustomIcon('#d97706', '!');
 const iconMausoleo = createCustomIcon('#b45309', '🏛');
 const iconSelected = createCustomIcon('#2563eb', '★');
 
+const BASE_MAPS = {
+  'google-hybrid': {
+    name: 'Google Satélite Híbrido (Recomendado)',
+    url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    maxZoom: 20
+  },
+  'google-satellite': {
+    name: 'Google Satélite Puro',
+    url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    maxZoom: 20
+  },
+  'esri-satellite': {
+    name: 'Esri Satélite SIG (Alta Resolución)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+    maxZoom: 19
+  },
+  'carto-voyager': {
+    name: 'Carto Voyager (Plano Moderno)',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; CARTO &copy; OpenStreetMap',
+    maxZoom: 19
+  },
+  'osm': {
+    name: 'OpenStreetMap Clásico',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19
+  }
+};
+
 export const MapPage = ({ initialGraveId, setActivePage }) => {
   const [patios, setPatios] = useState([]);
   const [sepulturas, setSepulturas] = useState([]);
@@ -57,14 +90,17 @@ export const MapPage = ({ initialGraveId, setActivePage }) => {
   const [mapTarget, setMapTarget] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
   
+  // Base map style (default to Google Satellite Hybrid for best visuals)
+  const [currentBaseMap, setCurrentBaseMap] = useState('google-hybrid');
+
   // Layer toggles (Mockup Slide 8 Left "Capas")
   const [showPatios, setShowPatios] = useState(true);
   const [showSepulturas, setShowSepulturas] = useState(true);
   const [showMausoleos, setShowMausoleos] = useState(true);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
 
-  // Center of Cementerio General de Los Ángeles
-  const defaultCenter = [-37.4695, -72.3525];
+  // Center of Cementerio General de Los Ángeles (Ubicación real: Camino San Antonio / Av. Gabriela Mistral)
+  const defaultCenter = [-37.4732, -72.3229];
   const [currentZoom, setCurrentZoom] = useState(17);
 
   useEffect(() => {
@@ -153,22 +189,59 @@ export const MapPage = ({ initialGraveId, setActivePage }) => {
             </button>
 
             {layersMenuOpen && (
-              <div style={{ position: 'absolute', right: 0, top: '42px', backgroundColor: 'white', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', padding: '0.85rem 1rem', width: '200px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                <div style={{ fontSize: '0.76rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Capas Activas
+              <div style={{ position: 'absolute', right: 0, top: '42px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 12px 28px rgba(0,0,0,0.15)', padding: '1rem', width: '260px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                    Mapa Base (Visualización)
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {Object.entries(BASE_MAPS).map(([key, bm]) => (
+                      <label
+                        key={key}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          padding: '0.25rem 0.4rem',
+                          borderRadius: '6px',
+                          backgroundColor: currentBaseMap === key ? '#e8f5e9' : 'transparent',
+                          fontWeight: currentBaseMap === key ? '600' : 'normal',
+                          color: currentBaseMap === key ? '#1b4332' : '#334155'
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="baseMap"
+                          checked={currentBaseMap === key}
+                          onChange={() => setCurrentBaseMap(key)}
+                        />
+                        {bm.name}
+                      </label>
+                    ))}
+                  </div>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={showPatios} onChange={(e) => setShowPatios(e.target.checked)} />
-                  Patios Topográficos (5)
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={showSepulturas} onChange={(e) => setShowSepulturas(e.target.checked)} />
-                  Sepulturas Catastradas
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={showMausoleos} onChange={(e) => setShowMausoleos(e.target.checked)} />
-                  Mausoleos Históricos
-                </label>
+
+                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.6rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                    Capas Activas
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.84rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={showPatios} onChange={(e) => setShowPatios(e.target.checked)} />
+                      Patios Topográficos (5)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.84rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={showSepulturas} onChange={(e) => setShowSepulturas(e.target.checked)} />
+                      Sepulturas Catastradas
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.84rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={showMausoleos} onChange={(e) => setShowMausoleos(e.target.checked)} />
+                      Mausoleos Históricos
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -183,8 +256,10 @@ export const MapPage = ({ initialGraveId, setActivePage }) => {
           style={{ width: '100%', height: '100%' }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            key={currentBaseMap}
+            attribution={BASE_MAPS[currentBaseMap].attribution}
+            url={BASE_MAPS[currentBaseMap].url}
+            maxZoom={BASE_MAPS[currentBaseMap].maxZoom || 20}
           />
 
           {mapTarget && <MapFlyTo position={mapTarget} zoom={19} />}

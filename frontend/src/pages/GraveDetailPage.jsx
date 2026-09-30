@@ -192,7 +192,10 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
               attributionControl={false}
               style={{ width: '100%', height: '100%' }}
             >
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <TileLayer 
+                url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" 
+                maxZoom={20}
+              />
               <Marker position={[grave.latitud, grave.longitud]} icon={miniPinIcon} />
             </MapContainer>
           </div>

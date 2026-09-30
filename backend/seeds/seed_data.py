@@ -14,8 +14,8 @@ def run_seed():
         print("[INFO] Iniciando poblamiento de base de datos...")
         db.create_all()
 
-        # 1. Patios (5 patios actualizados topográficamente en Los Ángeles)
-        # Cementerio General de Los Ángeles: ~ Lat -37.4690, Lon -72.3530
+        # 1. Patios (5 patios actualizados en el predio real del Cementerio General de Los Ángeles)
+        # Ubicación real: Camino San Antonio s/n / Av. Gabriela Mistral (~ Lat -37.4732, Lon -72.3229)
         patios_data = [
             {
                 "numero": 1,
@@ -26,11 +26,11 @@ def run_seed():
                 "geom": {
                     "type": "Polygon",
                     "coordinates": [[
-                        [-72.3540, -37.4675],
-                        [-72.3525, -37.4675],
-                        [-72.3525, -37.4690],
-                        [-72.3540, -37.4690],
-                        [-72.3540, -37.4675]
+                        [-72.3245, -37.4718],
+                        [-72.3228, -37.4718],
+                        [-72.3228, -37.4730],
+                        [-72.3245, -37.4730],
+                        [-72.3245, -37.4718]
                     ]]
                 }
             },
@@ -43,11 +43,11 @@ def run_seed():
                 "geom": {
                     "type": "Polygon",
                     "coordinates": [[
-                        [-72.3525, -37.4675],
-                        [-72.3510, -37.4675],
-                        [-72.3510, -37.4690],
-                        [-72.3525, -37.4690],
-                        [-72.3525, -37.4675]
+                        [-72.3228, -37.4718],
+                        [-72.3212, -37.4718],
+                        [-72.3212, -37.4730],
+                        [-72.3228, -37.4730],
+                        [-72.3228, -37.4718]
                     ]]
                 }
             },
@@ -60,11 +60,11 @@ def run_seed():
                 "geom": {
                     "type": "Polygon",
                     "coordinates": [[
-                        [-72.3540, -37.4690],
-                        [-72.3525, -37.4690],
-                        [-72.3525, -37.4708],
-                        [-72.3540, -37.4708],
-                        [-72.3540, -37.4690]
+                        [-72.3245, -37.4730],
+                        [-72.3228, -37.4730],
+                        [-72.3228, -37.4745],
+                        [-72.3245, -37.4745],
+                        [-72.3245, -37.4730]
                     ]]
                 }
             },
@@ -77,11 +77,11 @@ def run_seed():
                 "geom": {
                     "type": "Polygon",
                     "coordinates": [[
-                        [-72.3525, -37.4690],
-                        [-72.3510, -37.4690],
-                        [-72.3510, -37.4708],
-                        [-72.3525, -37.4708],
-                        [-72.3525, -37.4690]
+                        [-72.3228, -37.4730],
+                        [-72.3212, -37.4730],
+                        [-72.3212, -37.4745],
+                        [-72.3228, -37.4745],
+                        [-72.3228, -37.4730]
                     ]]
                 }
             },
@@ -94,11 +94,11 @@ def run_seed():
                 "geom": {
                     "type": "Polygon",
                     "coordinates": [[
-                        [-72.3540, -37.4708],
-                        [-72.3510, -37.4708],
-                        [-72.3510, -37.4720],
-                        [-72.3540, -37.4720],
-                        [-72.3540, -37.4708]
+                        [-72.3245, -37.4745],
+                        [-72.3212, -37.4745],
+                        [-72.3212, -37.4755],
+                        [-72.3245, -37.4755],
+                        [-72.3245, -37.4745]
                     ]]
                 }
             }
@@ -173,8 +173,8 @@ def run_seed():
                 "resena_historica": "Construido en 1933, es uno de los ejemplos más representativos de la arquitectura funeraria de nuestra ciudad. Edificado con mármol travertino y ornamentación en bronce, resguarda los restos de los fundadores del comercio local.",
                 "foto_url": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
                 "patio_numero": 1,
-                "latitud": -37.46815,
-                "longitud": -72.35330,
+                "latitud": -37.47225,
+                "longitud": -72.32350,
                 "destacado": True
             },
             {
@@ -186,8 +186,8 @@ def run_seed():
                 "resena_historica": "Monumento funerario erigido en honor a los primeros colonizadores y alcaldes del siglo XIX en la Villa de Los Ángeles.",
                 "foto_url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80",
                 "patio_numero": 1,
-                "latitud": -37.46790,
-                "longitud": -72.35360,
+                "latitud": -37.47200,
+                "longitud": -72.32380,
                 "destacado": True
             },
             {
@@ -199,8 +199,8 @@ def run_seed():
                 "resena_historica": "Destacada estructura de granito negro y líneas geométricas puras, testimonio del modernismo de principios del siglo XX.",
                 "foto_url": "https://images.unsplash.com/photo-1508873696983-2df5293cb395?auto=format&fit=crop&w=800&q=80",
                 "patio_numero": 2,
-                "latitud": -37.46840,
-                "longitud": -72.35180,
+                "latitud": -37.47240,
+                "longitud": -72.32200,
                 "destacado": True
             },
             {
@@ -212,8 +212,8 @@ def run_seed():
                 "resena_historica": "Homenaje de fraternidad obrera levantado por las agrupaciones gremiales y obreras de la provincia de Biobío.",
                 "foto_url": "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80",
                 "patio_numero": 2,
-                "latitud": -37.46870,
-                "longitud": -72.35220,
+                "latitud": -37.47270,
+                "longitud": -72.32240,
                 "destacado": True
             },
             {
@@ -225,8 +225,8 @@ def run_seed():
                 "resena_historica": "Resguarda los restos de los soldados angelinos del Batallón Cívico Los Ángeles que combatieron en el norte.",
                 "foto_url": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
                 "patio_numero": 1,
-                "latitud": -37.46830,
-                "longitud": -72.35290,
+                "latitud": -37.47230,
+                "longitud": -72.32310,
                 "destacado": False
             },
             {
@@ -238,8 +238,8 @@ def run_seed():
                 "resena_historica": "Dedicado a maestros y profesores normalistas que fundaron los primeros colegios públicos de la comarca.",
                 "foto_url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80",
                 "patio_numero": 3,
-                "latitud": -37.46950,
-                "longitud": -72.35320,
+                "latitud": -37.47350,
+                "longitud": -72.32340,
                 "destacado": False
             }
         ]
@@ -280,8 +280,8 @@ def run_seed():
                 "fecha_fallecimiento": date(2020, 3, 12),
                 "observaciones": "Sepultura de uso individual. Mantenimiento general en buen estado. Sin observaciones adicionales.",
                 "ubicacion_detalle": "Patio 2, Fila 4, Número 104",
-                "latitud": -37.46825,
-                "longitud": -72.35175
+                "latitud": -37.47230,
+                "longitud": -72.32200
             },
             {
                 "numero": "027",
@@ -296,8 +296,8 @@ def run_seed():
                 "fecha_fallecimiento": date(2018, 8, 28),
                 "observaciones": "Placa de mármol blanco en óptimas condiciones.",
                 "ubicacion_detalle": "Patio 1, Fila 2, Número 027",
-                "latitud": -37.46800,
-                "longitud": -72.35310
+                "latitud": -37.47210,
+                "longitud": -72.32330
             },
             {
                 "numero": "198",
@@ -312,8 +312,8 @@ def run_seed():
                 "fecha_fallecimiento": date(2012, 1, 17),
                 "observaciones": "Mantención al día por familiares.",
                 "ubicacion_detalle": "Patio 3, Fila 8, Número 198",
-                "latitud": -37.46980,
-                "longitud": -72.35340
+                "latitud": -37.47380,
+                "longitud": -72.32360
             },
             {
                 "numero": "052",
@@ -328,8 +328,8 @@ def run_seed():
                 "fecha_fallecimiento": date(2021, 9, 4),
                 "observaciones": "Jardinera con flores naturales ornamentales.",
                 "ubicacion_detalle": "Patio 4, Fila 3, Número 052",
-                "latitud": -37.46970,
-                "longitud": -72.35160
+                "latitud": -37.47370,
+                "longitud": -72.32180
             },
             {
                 "numero": "089",
@@ -344,8 +344,8 @@ def run_seed():
                 "fecha_fallecimiento": date(2005, 10, 30),
                 "observaciones": "Sin deudas municipales registradas.",
                 "ubicacion_detalle": "Patio 1, Fila 5, Número 089",
-                "latitud": -37.46860,
-                "longitud": -72.35350
+                "latitud": -37.47260,
+                "longitud": -72.32370
             },
             {
                 "numero": "145",
@@ -360,8 +360,8 @@ def run_seed():
                 "fecha_fallecimiento": None,
                 "observaciones": "Sitio disponible para concesión o asignación.",
                 "ubicacion_detalle": "Patio 2, Fila 6, Número 145",
-                "latitud": -37.46810,
-                "longitud": -72.35210
+                "latitud": -37.47220,
+                "longitud": -72.32230
             },
             {
                 "numero": "203",
@@ -376,8 +376,8 @@ def run_seed():
                 "fecha_fallecimiento": None,
                 "observaciones": "Sitio individual disponible.",
                 "ubicacion_detalle": "Patio 3, Fila 2, Número 203",
-                "latitud": -37.47010,
-                "longitud": -72.35300
+                "latitud": -37.47410,
+                "longitud": -72.32320
             },
             {
                 "numero": "176",
@@ -392,8 +392,8 @@ def run_seed():
                 "fecha_fallecimiento": None,
                 "observaciones": "Espacio regularizado disponible.",
                 "ubicacion_detalle": "Patio 4, Fila 7, Número 176",
-                "latitud": -37.47030,
-                "longitud": -72.35190
+                "latitud": -37.47430,
+                "longitud": -72.32210
             }
         ]
 
@@ -430,13 +430,13 @@ def run_seed():
 
         for patio_num in range(1, 6):
             p = patio_map[patio_num]
-            min_lon, max_lon = (-72.3540, -72.3525) if patio_num in [1, 3] else (-72.3525, -72.3510)
+            min_lon, max_lon = (-72.3245, -72.3228) if patio_num in [1, 3] else (-72.3228, -72.3212)
             if patio_num == 5:
-                min_lon, max_lon = (-72.3540, -72.3510)
+                min_lon, max_lon = (-72.3245, -72.3212)
             
-            min_lat, max_lat = (-37.4690, -37.4675) if patio_num in [1, 2] else (-37.4708, -37.4690)
+            min_lat, max_lat = (-37.4730, -37.4718) if patio_num in [1, 2] else (-37.4745, -37.4730)
             if patio_num == 5:
-                min_lat, max_lat = (-37.4720, -37.4708)
+                min_lat, max_lat = (-37.4755, -37.4745)
 
             for i in range(1, 28):
                 num_str = f"{patio_num * 100 + i:03d}"
