@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Landmark, Search, Map, Shield, User, LogIn, LogOut, BookOpen, LayoutDashboard } from 'lucide-react';
+import { Landmark, Search, Map, Shield, User, LogIn, LogOut, BookOpen, LayoutDashboard, Edit3 } from 'lucide-react';
 
 export const Navbar = ({ activePage, setActivePage, openLoginModal }) => {
   const { user, role, isAuthenticated, logout, isFuncionario, isAdmin } = useAuth();
@@ -44,11 +44,19 @@ export const Navbar = ({ activePage, setActivePage, openLoginModal }) => {
           Buscar sepultura
         </button>
         <button 
-          className={`nav-link ${activePage.name === 'map' ? 'active' : ''}`}
-          onClick={() => setActivePage({ name: 'map' })}
+          className={`nav-link ${activePage.name === 'map' && !activePage.openEditor ? 'active' : ''}`}
+          onClick={() => setActivePage({ name: 'map', openEditor: false })}
         >
           <Map size={16} />
           Mapa
+        </button>
+        <button 
+          className={`nav-link ${activePage.name === 'map' && activePage.openEditor ? 'active' : ''}`}
+          onClick={() => setActivePage({ name: 'map', openEditor: true })}
+          style={{ color: '#166534', fontWeight: '700' }}
+        >
+          <Edit3 size={16} />
+          Editor de Patios SIG
         </button>
         <button 
           className={`nav-link ${activePage.name === 'mausoleos' ? 'active' : ''}`}

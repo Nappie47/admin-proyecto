@@ -129,7 +129,7 @@ const COLOR_PRESETS = [
   '#1e3a8a', '#1d4ed8', '#0284c7', '#0f766e', '#854d0e'
 ];
 
-export const MapPage = ({ initialGraveId, setActivePage }) => {
+export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) => {
   const [patios, setPatios] = useState([]);
   const [sepulturas, setSepulturas] = useState([]);
   const [mausoleos, setMausoleos] = useState([]);
@@ -147,7 +147,14 @@ export const MapPage = ({ initialGraveId, setActivePage }) => {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
 
   // Patio Editor State
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(initialOpenEditor || false);
+
+  useEffect(() => {
+    if (initialOpenEditor !== undefined) {
+      setEditorOpen(initialOpenEditor);
+    }
+  }, [initialOpenEditor]);
+
   const [editingPatio, setEditingPatio] = useState(null); // null when not in form, or patio object
   const [drawingPoints, setDrawingPoints] = useState([]); // array of [lat, lng]
   const [formData, setFormData] = useState({

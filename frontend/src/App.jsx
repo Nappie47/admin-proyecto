@@ -21,7 +21,7 @@ export function AppContent() {
       case 'search':
         return <SearchPage initialQuery={activePage.query} setActivePage={setActivePage} />;
       case 'map':
-        return <MapPage initialGraveId={activePage.selectedGraveId} setActivePage={setActivePage} />;
+        return <MapPage initialGraveId={activePage.selectedGraveId} initialOpenEditor={activePage.openEditor} setActivePage={setActivePage} />;
       case 'detail':
         return <GraveDetailPage graveId={activePage.id} setActivePage={setActivePage} />;
       case 'admin':
