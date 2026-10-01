@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, RotateCcw, MapPin, Calendar, Compass, ArrowRight } from 'lucide-react';
-import { sepulturaService } from '../services/api';
+import { patioService, sepulturaService } from '../services/api';
 
 export const SearchPage = ({ initialQuery, setActivePage }) => {
   const [q, setQ] = useState(initialQuery || '');
@@ -11,25 +11,41 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
   
   const [results, setResults] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [patios, setPatios] = useState([]);
+  const [patiosError, setPatiosError] = useState(null);
 
-  const performSearch = async () => {
+  const performSearch = async (page = 1, clearFilters = false) => {
     setLoading(true);
+    setSearchError(null);
     try {
-      const params = {};
-      if (q.trim()) params.q = q.trim();
-      if (nombre.trim()) params.nombre = nombre.trim();
-      if (apellido.trim()) params.apellido = apellido.trim();
-      if (patio !== 'Todos') params.patio = patio;
-      if (sector !== 'Todos') params.sector = sector;
+      const params = { page, per_page: 12 };
+      if (!clearFilters) {
+        if (q.trim()) params.q = q.trim();
+        if (nombre.trim()) params.nombre = nombre.trim();
+        if (apellido.trim()) params.apellido = apellido.trim();
+        if (patio !== 'Todos') params.patio = patio;
+        if (sector !== 'Todos') params.sector = sector;
+      }
 
       const res = await sepulturaService.list(params);
       if (res.data.success) {
         setResults(res.data.sepulturas);
         setTotalCount(res.data.total);
+        setCurrentPage(res.data.page);
+        setTotalPages(res.data.pages);
+      } else {
+        throw new Error(res.data.error || 'No se pudo completar la búsqueda.');
       }
     } catch (err) {
       console.error('Error buscando sepulturas:', err);
+      setResults([]);
+      setTotalCount(0);
+      setTotalPages(0);
+      setSearchError('No se pudo realizar la búsqueda. Revisa tu conexión e inténtalo nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -39,18 +55,33 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
     performSearch();
   }, [initialQuery]);
 
+  useEffect(() => {
+    let isCurrentRequest = true;
+    patioService.list()
+      .then(res => {
+        if (!res.data.success) {
+          throw new Error('El servidor no confirmó la lista de patios.');
+        }
+        if (isCurrentRequest) setPatios(res.data.patios);
+      })
+      .catch(err => {
+        console.error('Error cargando patios para búsqueda:', err);
+        if (isCurrentRequest) {
+          setPatiosError('No se pudieron cargar los patios para filtrar la búsqueda.');
+        }
+      });
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, []);
+
   const handleClearFilters = () => {
     setQ('');
     setNombre('');
     setApellido('');
     setPatio('Todos');
     setSector('Todos');
-    sepulturaService.list({}).then(res => {
-      if (res.data.success) {
-        setResults(res.data.sepulturas);
-        setTotalCount(res.data.total);
-      }
-    });
+    performSearch(1, true);
   };
 
   const handleFormSubmit = (e) => {
@@ -155,12 +186,17 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
                 style={{ width: '100%' }}
               >
                 <option value="Todos">Todos</option>
-                <option value="1">Patio 1</option>
-                <option value="2">Patio 2</option>
-                <option value="3">Patio 3</option>
-                <option value="4">Patio 4</option>
-                <option value="5">Patio 5</option>
+                {patios.map(patio => (
+                  <option key={patio.id} value={patio.numero}>
+                    Patio {patio.numero}{patio.nombre ? ` — ${patio.nombre}` : ''}
+                  </option>
+                ))}
               </select>
+              {patiosError && (
+                <span role="alert" style={{ display: 'block', marginTop: '0.35rem', color: '#991b1b', fontSize: '0.78rem' }}>
+                  {patiosError}
+                </span>
+              )}
             </div>
 
             <div>
@@ -205,6 +241,12 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
           Ordenar por: <span style={{ fontWeight: '600', color: '#1e293b' }}>Relevancia</span>
         </div>
       </div>
+
+      {searchError && (
+        <div role="alert" style={{ marginBottom: '1rem', padding: '0.85rem 1rem', borderRadius: '8px', backgroundColor: '#fef2f2', color: '#991b1b' }}>
+          {searchError}
+        </div>
+      )}
 
       {/* Results List (Slide 7 Right Cards) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -318,7 +360,7 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
           );
         })}
 
-        {results.length === 0 && !loading && (
+        {results.length === 0 && !loading && !searchError && (
           <div style={{ backgroundColor: 'white', padding: '3rem', borderRadius: '16px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b' }}>
             <Search size={36} color="#cbd5e1" style={{ marginBottom: '1rem' }} />
             <h4 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>
@@ -333,6 +375,30 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
           </div>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <nav aria-label="Paginación de resultados" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={loading || currentPage <= 1}
+            onClick={() => performSearch(currentPage - 1)}
+          >
+            Anterior
+          </button>
+          <span aria-live="polite" style={{ color: '#64748b', fontSize: '0.9rem' }}>
+            Página {currentPage} de {totalPages}
+          </span>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={loading || currentPage >= totalPages}
+            onClick={() => performSearch(currentPage + 1)}
+          >
+            Siguiente
+          </button>
+        </nav>
+      )}
     </div>
   );
 };

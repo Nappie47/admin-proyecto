@@ -1,127 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { 
   Search, Layers, X, MapPin, Eye, ExternalLink, Info, Compass,
-  Edit3, Plus, Trash2, Save, Database, Sparkles, Undo2, RefreshCw, CheckCircle2
+  Edit3, Plus, Trash2, Save, Database, Undo2, RefreshCw, CheckCircle2
 } from 'lucide-react';
 import { sepulturaService, patioService, mausoleoService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-// Custom Map Helper to move center
-function MapFlyTo({ position, zoom }) {
-  const map = useMap();
-  useEffect(() => {
-    if (position) {
-      map.flyTo(position, zoom || 18, { duration: 1.2 });
-    }
-  }, [position, zoom, map]);
-  return null;
-}
-
-// Map Click Listener for interactive polygon drawing
-function MapClickHandler({ isDrawing, onMapClick }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (isDrawing) {
-      map.getContainer().style.cursor = 'crosshair';
-    } else {
-      map.getContainer().style.cursor = '';
-    }
-  }, [isDrawing, map]);
-
-  useMapEvents({
-    click(e) {
-      if (isDrawing) {
-        onMapClick([e.latlng.lat, e.latlng.lng]);
-      }
-    }
-  });
-
-  return null;
-}
-
-// Custom Leaflet DivIcon helpers
-const createCustomIcon = (color, symbol) => {
-  return L.divIcon({
-    className: 'custom-map-marker',
-    html: `
-      <div style="
-        background-color: ${color};
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 11px;
-        font-weight: bold;
-        border: 2px solid white;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        cursor: pointer;
-      ">
-        ${symbol || ''}
-      </div>
-    `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
-};
-
-const vertexIcon = L.divIcon({
-  className: 'vertex-map-marker',
-  html: `
-    <div style="
-      background-color: #ef4444;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      border: 2px solid white;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-    "></div>
-  `,
-  iconSize: [12, 12],
-  iconAnchor: [6, 6]
-});
-
-const iconOcupada = createCustomIcon('#2d6a4f', '✝');
-const iconDisponible = createCustomIcon('#0284c7', '•');
-const iconMantenimiento = createCustomIcon('#d97706', '!');
-const iconMausoleo = createCustomIcon('#b45309', '🏛');
-const iconSelected = createCustomIcon('#2563eb', '★');
+const GoogleCemeteryMap = lazy(() => import('../components/GoogleCemeteryMap'));
+const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const BASE_MAPS = {
-  'google-hybrid': {
-    name: 'Google Satélite Híbrido (Recomendado)',
-    url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-    attribution: '&copy; Google Maps',
-    maxZoom: 20
-  },
-  'google-satellite': {
-    name: 'Google Satélite Puro',
-    url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-    attribution: '&copy; Google Maps',
-    maxZoom: 20
-  },
-  'esri-satellite': {
-    name: 'Esri Satélite SIG (Alta Resolución)',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
-    maxZoom: 19
-  },
-  'carto-voyager': {
-    name: 'Carto Voyager (Plano Moderno)',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; CARTO &copy; OpenStreetMap',
-    maxZoom: 19
-  },
-  'osm': {
-    name: 'OpenStreetMap Clásico',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
-    maxZoom: 19
-  }
+  'google-roadmap': { name: 'Google Maps' },
+  'google-satellite': { name: 'Google Maps Satelital' },
 };
 
 const COLOR_PRESETS = [
@@ -129,16 +19,19 @@ const COLOR_PRESETS = [
   '#1e3a8a', '#1d4ed8', '#0284c7', '#0f766e', '#854d0e'
 ];
 
-export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) => {
+export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, setActivePage }) => {
+  const { isFuncionario, loading: authLoading } = useAuth();
+  const canEditPatios = isFuncionario && !authLoading;
   const [patios, setPatios] = useState([]);
   const [sepulturas, setSepulturas] = useState([]);
   const [mausoleos, setMausoleos] = useState([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState(null);
   const [selectedGrave, setSelectedGrave] = useState(null);
   const [mapTarget, setMapTarget] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
   
-  // Base map style
-  const [currentBaseMap, setCurrentBaseMap] = useState('google-hybrid');
+  const [currentBaseMap, setCurrentBaseMap] = useState('google-satellite');
 
   // Layer toggles
   const [showPatios, setShowPatios] = useState(true);
@@ -147,15 +40,24 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
 
   // Patio Editor State
-  const [editorOpen, setEditorOpen] = useState(initialOpenEditor || false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
-    if (initialOpenEditor !== undefined) {
+    if (canEditPatios && initialOpenEditor !== undefined) {
       setEditorOpen(initialOpenEditor);
     }
-  }, [initialOpenEditor]);
+  }, [canEditPatios, initialOpenEditor]);
+
+  useEffect(() => {
+    if (!canEditPatios) {
+      setEditorOpen(false);
+      setEditingPatio(null);
+      setDrawingPoints([]);
+    }
+  }, [canEditPatios]);
 
   const [editingPatio, setEditingPatio] = useState(null); // null when not in form, or patio object
+  const initialPatioEditStarted = useRef(false);
   const [drawingPoints, setDrawingPoints] = useState([]); // array of [lat, lng]
   const [formData, setFormData] = useState({
     numero: '',
@@ -165,39 +67,53 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
     color_hex: '#2d6a4f'
   });
   const [isSaving, setIsSaving] = useState(false);
-  const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [alertMsg, setAlertMsg] = useState(null);
 
-  // Center of Cementerio General de Los Ángeles
   const defaultCenter = [-37.4732, -72.3229];
-  const [currentZoom, setCurrentZoom] = useState(17);
+  const [currentZoom] = useState(18);
 
   const loadPatios = async () => {
     try {
       const res = await patioService.list();
       if (res.data.success) {
         setPatios(res.data.patios);
+      } else {
+        throw new Error(res.data.error || 'El servidor no confirmó la lista de patios.');
       }
     } catch (err) {
       console.error('Error cargando patios:', err);
+      setDataLoadError(err.response?.data?.error || err.message || 'No se pudieron cargar los patios. Revisa la conexión con el backend.');
     }
   };
 
   const loadSepulturas = async () => {
     try {
-      const res = await sepulturaService.list({ per_page: 250 });
-      if (res.data.success) {
-        setSepulturas(res.data.sepulturas);
-        if (initialGraveId) {
-          const target = res.data.sepulturas.find(s => s.id === initialGraveId);
-          if (target) {
-            setSelectedGrave(target);
-            setMapTarget([target.latitud, target.longitud]);
-          }
+      const allSepulturas = [];
+      let page = 1;
+      let pages = 1;
+
+      while (page <= pages) {
+        const res = await sepulturaService.list({ page, per_page: 250 });
+        if (!res.data.success) {
+          throw new Error(res.data.error || 'La respuesta del servidor no incluyó las sepulturas.');
+        }
+
+        allSepulturas.push(...res.data.sepulturas);
+        pages = res.data.pages || 1;
+        page += 1;
+      }
+
+      setSepulturas(allSepulturas);
+      if (initialGraveId) {
+        const target = allSepulturas.find(s => s.id === initialGraveId);
+        if (target) {
+          setSelectedGrave(target);
+          setMapTarget([target.latitud, target.longitud]);
         }
       }
     } catch (err) {
       console.error('Error cargando sepulturas:', err);
+      setDataLoadError(err.response?.data?.error || err.message || 'No se pudieron cargar las sepulturas. Revisa la conexión con el backend.');
     }
   };
 
@@ -209,13 +125,21 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
       }
     } catch (err) {
       console.error('Error cargando mausoleos:', err);
+      setDataLoadError('No se pudieron cargar los mausoleos. Revisa la conexión con el backend.');
     }
   };
 
   useEffect(() => {
-    loadPatios();
-    loadSepulturas();
-    loadMausoleos();
+    let isCurrentRequest = true;
+    setIsLoadingRecords(true);
+    setDataLoadError(null);
+    Promise.all([loadPatios(), loadSepulturas(), loadMausoleos()])
+      .finally(() => {
+        if (isCurrentRequest) setIsLoadingRecords(false);
+      });
+    return () => {
+      isCurrentRequest = false;
+    };
   }, [initialGraveId]);
 
   const handleSelectGrave = (grave) => {
@@ -229,9 +153,9 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
     setEditingPatio({ id: null });
     setFormData({
       numero: nextNum,
-      nombre: `Patio ${nextNum} - Nuevo Sector`,
-      descripcion: 'Sector delimitado mediante editor SIG satelital',
-      superficie_m2: '4800',
+      nombre: `Patio ${nextNum}`,
+      descripcion: '',
+      superficie_m2: '',
       color_hex: COLOR_PRESETS[(nextNum - 1) % COLOR_PRESETS.length]
     });
     setDrawingPoints([]);
@@ -259,6 +183,16 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
     }
     setSelectedGrave(null);
   };
+
+  useEffect(() => {
+    if (!canEditPatios || initialPatioEditStarted.current || !initialPatioId) return;
+    const patio = patios.find(item => item.id === initialPatioId);
+    if (!patio) return;
+
+    initialPatioEditStarted.current = true;
+    setEditorOpen(true);
+    handleStartEditPatio(patio);
+  }, [canEditPatios, initialPatioId, patios]);
 
   const handleCancelEdit = () => {
     setEditingPatio(null);
@@ -315,10 +249,10 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
     try {
       if (editingPatio.id) {
         await patioService.update(editingPatio.id, payload);
-        setAlertMsg({ type: 'success', text: `¡Patio ${payload.numero} actualizado en PostgreSQL (10.0.3.10:5000)!` });
+        setAlertMsg({ type: 'success', text: `¡Patio ${payload.numero} actualizado correctamente!` });
       } else {
         await patioService.create(payload);
-        setAlertMsg({ type: 'success', text: `¡Patio ${payload.numero} guardado en PostgreSQL (10.0.3.10:5000)!` });
+        setAlertMsg({ type: 'success', text: `¡Patio ${payload.numero} guardado correctamente!` });
       }
       await loadPatios();
       setEditingPatio(null);
@@ -332,7 +266,7 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
   };
 
   const handleDeletePatio = async (patio) => {
-    if (!window.confirm(`¿Está seguro de eliminar el Patio ${patio.numero} (${patio.nombre})? Esta acción se aplicará en la base de datos PostgreSQL.`)) {
+    if (!window.confirm(`¿Está seguro de eliminar el Patio ${patio.numero} (${patio.nombre})?`)) {
       return;
     }
     try {
@@ -348,31 +282,6 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
     }
   };
 
-  const handleBootstrapDefaults = async () => {
-    if (!window.confirm("¿Desea inicializar los 5 Patios Oficiales, Usuario Admin y Sepulturas en PostgreSQL (10.0.3.10:5000)?")) {
-      return;
-    }
-    setIsBootstrapping(true);
-    setAlertMsg(null);
-    try {
-      const res = await patioService.bootstrap();
-      if (res.data.success) {
-        setAlertMsg({ 
-          type: 'success', 
-          text: `¡Listo! Se guardaron ${res.data.total_patios} patios, ${res.data.total_usuarios} usuarios y ${res.data.total_sepulturas} sepulturas en PostgreSQL (10.0.3.10:5000).` 
-        });
-        await loadPatios();
-        await loadSepulturas();
-        await loadMausoleos();
-        setMapTarget(defaultCenter);
-      }
-    } catch (err) {
-      setAlertMsg({ type: 'error', text: err.response?.data?.error || 'Error poblando base de datos' });
-    } finally {
-      setIsBootstrapping(false);
-    }
-  };
-
   const filteredSepulturas = sepulturas.filter(s => {
     if (!searchFilter.trim()) return true;
     const term = searchFilter.toLowerCase();
@@ -384,7 +293,7 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
   });
 
   return (
-    <div style={{ position: 'relative', height: 'calc(100vh - 72px)', display: 'flex', flexDirection: 'column' }}>
+    <div className="map-page">
       {/* Top Banner and Filter Bar */}
       <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 100, flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
@@ -392,10 +301,7 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
             SIG Cementerio General Los Ángeles
           </span>
           <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f2d1e', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            Mapa Interactivo & Catastro
-            <span style={{ fontSize: '0.72rem', backgroundColor: '#e8f5e9', color: '#1b4332', padding: '0.2rem 0.6rem', borderRadius: '12px', fontWeight: '600' }}>
-              DB: 10.0.3.10:5000
-            </span>
+            Mapa interactivo del cementerio
           </h2>
         </div>
 
@@ -427,7 +333,7 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
               <div style={{ position: 'absolute', right: 0, top: '42px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 12px 28px rgba(0,0,0,0.15)', padding: '1rem', width: '270px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
-                    Mapa Base Satelital
+                    Mapa base
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {Object.entries(BASE_MAPS).map(([key, bm]) => (
@@ -481,24 +387,27 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
             )}
           </div>
 
-          {/* Botón Editor de Patios SIG */}
-          <button
-            onClick={() => {
-              setEditorOpen(!editorOpen);
-              if (!editorOpen) setSelectedGrave(null);
-            }}
-            className={editorOpen ? "btn-primary" : "btn-secondary"}
-            style={{ 
-              height: '36px', 
-              padding: '0 1rem', 
-              fontSize: '0.84rem',
-              backgroundColor: editorOpen ? '#1b4332' : undefined,
-              color: editorOpen ? 'white' : undefined
-            }}
-          >
-            <Edit3 size={15} />
-            {editorOpen ? 'Cerrar Editor' : 'Editor de Patios SIG'}
-          </button>
+          {canEditPatios && (
+            <button
+              onClick={() => {
+                setEditorOpen(!editorOpen);
+                if (!editorOpen) {
+                  setSelectedGrave(null);
+                }
+              }}
+              className={editorOpen ? "btn-primary" : "btn-secondary"}
+              style={{
+                height: '36px',
+                padding: '0 1rem',
+                fontSize: '0.84rem',
+                backgroundColor: editorOpen ? '#1b4332' : undefined,
+                color: editorOpen ? 'white' : undefined
+              }}
+            >
+              <Edit3 size={15} />
+              {editorOpen ? 'Cerrar Editor' : 'Editor de Patios SIG'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -530,163 +439,41 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
       )}
 
       {/* Map Area */}
-      <div style={{ position: 'relative', flex: 1 }}>
-        <MapContainer
-          center={defaultCenter}
-          zoom={currentZoom}
-          style={{ width: '100%', height: '100%' }}
-        >
-          <TileLayer
-            key={currentBaseMap}
-            attribution={BASE_MAPS[currentBaseMap].attribution}
-            url={BASE_MAPS[currentBaseMap].url}
-            maxZoom={BASE_MAPS[currentBaseMap].maxZoom || 20}
-          />
-
-          {mapTarget && <MapFlyTo position={mapTarget} zoom={19} />}
-
-          {/* Click handler for polygon boundary drawing */}
-          <MapClickHandler isDrawing={!!editingPatio} onMapClick={handleMapClick} />
-
-          {/* Existing Patios Polygons */}
-          {showPatios && patios.map(patio => {
-            if (!patio.geometry || patio.geometry.type !== 'Polygon') return null;
-            const positions = patio.geometry.coordinates[0].map(c => [c[1], c[0]]);
-            const isCurrentEditing = editingPatio && editingPatio.id === patio.id;
-            if (isCurrentEditing) return null; // Don't show original while editing live
-
-            return (
-              <Polygon
-                key={`patio-${patio.id}`}
-                positions={positions}
-                pathOptions={{
-                  color: patio.color_hex || '#2d6a4f',
-                  fillColor: patio.color_hex || '#2d6a4f',
-                  fillOpacity: 0.22,
-                  weight: 2,
-                  dashArray: '4, 4'
-                }}
-              >
-                <Popup>
-                  <div style={{ padding: '0.3rem' }}>
-                    <h4 style={{ fontWeight: '700', color: '#1b4332', fontSize: '0.95rem', margin: 0 }}>
-                      Patio {patio.numero}: {patio.nombre}
-                    </h4>
-                    <p style={{ fontSize: '0.8rem', color: '#475569', margin: '0.3rem 0' }}>{patio.descripcion}</p>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Superficie: {patio.superficie_m2} m²</div>
-                    {editorOpen && (
-                      <button
-                        onClick={() => handleStartEditPatio(patio)}
-                        style={{ marginTop: '0.5rem', background: '#2d6a4f', color: 'white', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                      >
-                        Editar Límites
-                      </button>
-                    )}
-                  </div>
-                </Popup>
-              </Polygon>
-            );
-          })}
-
-          {/* Polygon being currently drawn or edited */}
-          {editingPatio && drawingPoints.length >= 3 && (
-            <Polygon
-              positions={drawingPoints}
-              pathOptions={{
-                color: formData.color_hex || '#ef4444',
-                fillColor: formData.color_hex || '#ef4444',
-                fillOpacity: 0.35,
-                weight: 3,
-                dashArray: '6, 6'
+      <div className="map-stage">
+        {googleMapsApiKey ? (
+          <Suspense fallback={<div style={{ display: 'grid', placeItems: 'center', width: '100%', height: '100%', color: '#475569' }}>Cargando Google Maps...</div>}>
+            <GoogleCemeteryMap
+              apiKey={googleMapsApiKey}
+              mapTypeId={currentBaseMap === 'google-roadmap' ? 'roadmap' : 'satellite'}
+              center={defaultCenter}
+              zoom={currentZoom}
+              mapTarget={mapTarget}
+              editingPatio={editingPatio}
+              onMapClick={handleMapClick}
+              patios={patios}
+              sepulturas={filteredSepulturas}
+              mausoleos={mausoleos}
+              showPatios={showPatios}
+              showSepulturas={showSepulturas}
+              showMausoleos={showMausoleos}
+              selectedGrave={selectedGrave}
+              editorOpen={editorOpen}
+              drawingPoints={drawingPoints}
+              drawingColor={formData.color_hex}
+              onSelectGrave={handleSelectGrave}
+              onStartEditPatio={handleStartEditPatio}
+              onMapLoadError={() => {
+                setAlertMsg({ type: 'error', text: 'Google Maps no se pudo cargar. Revisa la clave de API, sus permisos y la conexión.' });
               }}
+              isLoadingRecords={isLoadingRecords}
+              dataLoadError={dataLoadError}
             />
-          )}
-
-          {/* Markers on vertices of editing polygon */}
-          {editingPatio && drawingPoints.map((pt, idx) => (
-            <Marker key={`vert-${idx}`} position={pt} icon={vertexIcon}>
-              <Popup>Vértice #{idx + 1}: {pt[0].toFixed(5)}, {pt[1].toFixed(5)}</Popup>
-            </Marker>
-          ))}
-
-          {/* Sepulturas Markers */}
-          {showSepulturas && filteredSepulturas.map(sep => {
-            const isSelected = selectedGrave && selectedGrave.id === sep.id;
-            let icon = iconOcupada;
-            if (isSelected) {
-              icon = iconSelected;
-            } else if (sep.estado === 'Disponible') {
-              icon = iconDisponible;
-            } else if (sep.estado === 'En Mantenimiento') {
-              icon = iconMantenimiento;
-            }
-
-            return (
-              <Marker
-                key={`sep-${sep.id}`}
-                position={[sep.latitud, sep.longitud]}
-                icon={icon}
-                eventHandlers={{
-                  click: () => {
-                    if (!editingPatio) handleSelectGrave(sep);
-                  }
-                }}
-              >
-                <Popup>
-                  <div style={{ padding: '0.2rem' }}>
-                    <strong>Sepultura #{sep.numero}</strong> ({sep.estado})<br />
-                    <span>{sep.nombre_completo}</span><br />
-                    <button 
-                      onClick={() => handleSelectGrave(sep)}
-                      style={{ marginTop: '0.4rem', border: 'none', background: '#2d6a4f', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                    >
-                      Ver ficha rápida
-                    </button>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
-
-          {/* Mausoleos Markers */}
-          {showMausoleos && mausoleos.map(m => (
-            <Marker
-              key={`mausoleo-${m.id}`}
-              position={[m.latitud, m.longitud]}
-              icon={iconMausoleo}
-              eventHandlers={{
-                click: () => {
-                  if (!editingPatio) {
-                    setSelectedGrave({
-                      id: `m-${m.id}`,
-                      numero: `M-${m.id}`,
-                      patio_numero: m.patio_numero || 1,
-                      sector: 'Histórico',
-                      tipo: 'Mausoleo Histórico',
-                      estado: 'Ocupada',
-                      nombre_completo: m.nombre,
-                      fecha_fallecimiento: `Construido en ${m.ano_construccion}`,
-                      ubicacion_detalle: m.estilo_arquitectonico,
-                      observaciones: m.resena_historica,
-                      latitud: m.latitud,
-                      longitud: m.longitud,
-                      isMausoleo: true,
-                      foto_url: m.foto_url
-                    });
-                    setMapTarget([m.latitud, m.longitud]);
-                  }
-                }
-              }}
-            >
-              <Popup>
-                <div>
-                  <strong>{m.nombre}</strong><br />
-                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{m.estilo_arquitectonico} ({m.ano_construccion})</span>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
+          </Suspense>
+        ) : (
+          <div role="alert" style={{ display: 'grid', placeItems: 'center', width: '100%', height: '100%', padding: '1.5rem', textAlign: 'center', color: '#991b1b', backgroundColor: '#fff7ed' }}>
+            Google Maps no está disponible porque falta configurar VITE_GOOGLE_MAPS_API_KEY en frontend/.env.local.
+          </div>
+        )}
 
         {/* Bottom Left Legend Box */}
         <div style={{
@@ -756,7 +543,7 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
                   Editor de Patios & Límites
                 </h3>
                 <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Escritura directa a PostgreSQL (10.0.3.10:5000)
+                  Los cambios se guardan en la base de datos configurada.
                 </span>
               </div>
               <button
@@ -773,34 +560,9 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
 
             {/* Editor Body */}
             <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Botón Poblar Rápido Base de Datos */}
-              <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '0.85rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#166534', fontWeight: '700', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
-                  <Sparkles size={16} />
-                  Poblamiento Rápido Oficial
-                </div>
-                <p style={{ fontSize: '0.75rem', color: '#14532d', margin: '0 0 0.6rem 0', lineHeight: '1.4' }}>
-                  Inicializa los 5 patios oficiales con sus límites satelitales reales, el usuario administrador y sepulturas de muestra.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleBootstrapDefaults}
-                  disabled={isBootstrapping}
-                  className="btn-primary"
-                  style={{ width: '100%', fontSize: '0.78rem', padding: '0.45rem', justifyContent: 'center' }}
-                >
-                  {isBootstrapping ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      Escribiendo en 10.0.3.10:5000...
-                    </>
-                  ) : (
-                    <>
-                      <Database size={14} />
-                      Poblar 5 Patios & Admin en DB
-                    </>
-                  )}
-                </button>
+              <div className="map-editor-hint">
+                <strong>Delimita sectores reales</strong>
+                <span>Usa la imagen satelital para identificar el perímetro. Los cambios solo se guardan al confirmar el formulario.</span>
               </div>
 
               {/* Si estamos creando o editando un patio */}
@@ -822,9 +584,9 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
 
                   {/* Instrucciones de Dibujo */}
                   <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.65rem', fontSize: '0.76rem', color: '#1e40af' }}>
-                    <strong>Modo Dibujo Activo:</strong> Haz clic sobre el mapa para marcar los vértices perimetrales del patio.
+                    <strong>Modo dibujo:</strong> Haz clic sobre el mapa para marcar los vértices del perímetro. Haz zoom para ubicar cada esquina con precisión.
                     <div style={{ marginTop: '0.35rem', fontWeight: '700' }}>
-                      Vértices marcados: {drawingPoints.length} {drawingPoints.length >= 3 ? '✓ (Polígono válido)' : '(Mínimo 3)'}
+                      Vértices marcados: {drawingPoints.length} {drawingPoints.length >= 3 ? '✓ (mínimo alcanzado; se valida al guardar)' : '(Mínimo 3)'}
                     </div>
                   </div>
 
@@ -951,12 +713,12 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
                     {isSaving ? (
                       <>
                         <RefreshCw size={15} className="animate-spin" />
-                        Guardando en PostgreSQL...
+                        Guardando...
                       </>
                     ) : (
                       <>
                         <Save size={15} />
-                        Guardar en DB (10.0.3.10:5000)
+                        Guardar en la base de datos
                       </>
                     )}
                   </button>
@@ -981,8 +743,8 @@ export const MapPage = ({ initialGraveId, initialOpenEditor, setActivePage }) =>
 
                   {patios.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px', color: '#64748b', fontSize: '0.82rem' }}>
-                      No hay patios en la base de datos.<br />
-                      Usa el botón de arriba para poblar los 5 oficiales o crea uno nuevo con el cursor.
+                      No hay sectores dibujados todavía.<br />
+                      Usa “Crear patio” para comenzar a delimitar la muestra.
                     </div>
                   ) : (
                     patios.map(p => (

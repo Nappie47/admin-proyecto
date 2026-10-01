@@ -6,21 +6,29 @@ export const HomePage = ({ setActivePage }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [featuredMausoleo, setFeaturedMausoleo] = useState(null);
   const [patios, setPatios] = useState([]);
+  const [isLoadingMausoleo, setIsLoadingMausoleo] = useState(true);
+  const [isLoadingPatios, setIsLoadingPatios] = useState(true);
+  const [mausoleoLoadError, setMausoleoLoadError] = useState(false);
+  const [patiosLoadError, setPatiosLoadError] = useState(false);
 
   useEffect(() => {
-    // Load featured historical mausoleum
     mausoleoService.list({ destacado: true }).then(res => {
       if (res.data.success && res.data.mausoleos.length > 0) {
         setFeaturedMausoleo(res.data.mausoleos[0]);
       }
-    }).catch(console.error);
+    }).catch(err => {
+      console.error('Error cargando mausoleos destacados:', err);
+      setMausoleoLoadError(true);
+    }).finally(() => setIsLoadingMausoleo(false));
 
-    // Load patios
     patioService.list().then(res => {
       if (res.data.success) {
         setPatios(res.data.patios);
       }
-    }).catch(console.error);
+    }).catch(err => {
+      console.error('Error cargando patios:', err);
+      setPatiosLoadError(true);
+    }).finally(() => setIsLoadingPatios(false));
   }, []);
 
   const handleSearchSubmit = (e) => {
@@ -33,9 +41,9 @@ export const HomePage = ({ setActivePage }) => {
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div className="home-page" style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
       {/* Hero Welcome Banner (Slide 7 Left Mockup) */}
-      <section style={{ 
+      <section className="home-hero" style={{
         position: 'relative', 
         borderRadius: '20px', 
         overflow: 'hidden', 
@@ -54,7 +62,7 @@ export const HomePage = ({ setActivePage }) => {
             Cementerio Municipal
           </h1>
           <p style={{ fontSize: '1.05rem', color: '#e2e8f0', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Un espacio de memoria y patrimonio para nuestra comunidad. Consulta la ubicación de sepulturas, explora nuestro catastro histórico y accede a información geográfica de manera rápida y sencilla.
+            Un espacio de memoria y patrimonio para nuestra comunidad. Esta versión piloto permite consultar una muestra acotada del catastro, sin representar la totalidad de las sepulturas del cementerio.
           </p>
 
           {/* Quick Search Bar */}
@@ -89,7 +97,7 @@ export const HomePage = ({ setActivePage }) => {
       </section>
 
       {/* 4 Quick Action Cards (Slide 7 Mockup) */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
+      <section className="home-quick-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
         <div 
           onClick={() => setActivePage({ name: 'search' })}
           style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '14px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
@@ -107,7 +115,7 @@ export const HomePage = ({ setActivePage }) => {
           </p>
         </div>
 
-        <div 
+        <div
           onClick={() => setActivePage({ name: 'map' })}
           style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '14px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
           onMouseEnter={(e) => e.currentTarget.style.borderColor = '#2d6a4f'}
@@ -120,7 +128,7 @@ export const HomePage = ({ setActivePage }) => {
             Ver mapa interactivo
           </h3>
           <p style={{ fontSize: '0.84rem', color: '#64748b', lineHeight: '1.5' }}>
-            Explora el cementerio en un visor cartográfico y conoce la distribución de sus 5 patios.
+            Explora el visor cartográfico y los sectores incorporados en esta etapa piloto.
           </p>
         </div>
 
@@ -137,30 +145,27 @@ export const HomePage = ({ setActivePage }) => {
             Mausoleos históricos
           </h3>
           <p style={{ fontSize: '0.84rem', color: '#64748b', lineHeight: '1.5' }}>
-            Descubre nuestro catastro de 40 monumentos emblemáticos con fotografías y reseñas.
+            Consulta los mausoleos históricos incorporados en esta etapa del proyecto, con fotografías y reseñas.
           </p>
         </div>
 
-        <div 
-          onClick={() => setActivePage({ name: 'map' })}
-          style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '14px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
-          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#2d6a4f'}
-          onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+        <div
+          style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
         >
           <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
             <Info size={20} color="#475569" />
           </div>
           <h3 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.4rem', color: '#0f2d1e' }}>
-            Información general
+            Sobre esta versión piloto
           </h3>
           <p style={{ fontSize: '0.84rem', color: '#64748b', lineHeight: '1.5' }}>
-            Horarios de visita, normativa interna y canales de atención de la administración.
+            La información disponible corresponde a una muestra acotada y no representa el catastro completo.
           </p>
         </div>
       </section>
 
       {/* Two Column Section (Explora el Cementerio + Mausoleo Destacado) */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '2rem' }}>
+      <section className="home-lower-panels" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '2rem' }}>
         {/* Left: Explora el cementerio / Distribución de Patios */}
         <div style={{ backgroundColor: 'white', padding: '1.75rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
@@ -180,49 +185,42 @@ export const HomePage = ({ setActivePage }) => {
             </button>
           </div>
 
-          {/* Graphical patio distribution diagram matching mockup */}
+          {/* Patio sample currently available in the configured database */}
           <div style={{ backgroundColor: '#f1f8f4', borderRadius: '12px', padding: '1.25rem', border: '1px dashed #b7e4c7', minHeight: '220px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-              <div 
-                onClick={() => setActivePage({ name: 'map', patio: 1 })}
-                style={{ backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #1b4332', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-              >
-                <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1b4332' }}>Patio 1</div>
-                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Acceso Histórico y Panteón</div>
+            {patios.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem' }}>
+                {patios.map(patio => (
+                  <button
+                    key={patio.id}
+                    type="button"
+                    onClick={() => setActivePage({ name: 'map', patio: patio.numero })}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      padding: '0.75rem',
+                      border: 'none',
+                      borderRadius: '8px',
+                      borderLeft: `4px solid ${patio.color_hex || '#2d6a4f'}`,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                    }}
+                  >
+                    <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1b4332' }}>
+                      Patio {patio.numero}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{patio.nombre}</div>
+                  </button>
+                ))}
               </div>
-              <div 
-                onClick={() => setActivePage({ name: 'map', patio: 2 })}
-                style={{ backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #2d6a4f', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-              >
-                <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#2d6a4f' }}>Patio 2</div>
-                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Sector Central y Familias</div>
+            ) : (
+              <div role="status" style={{ margin: 'auto', color: '#64748b', textAlign: 'center', fontSize: '0.88rem' }}>
+                {isLoadingPatios
+                  ? 'Cargando patios...'
+                  : patiosLoadError
+                    ? 'No se pudieron cargar los patios. Revisa la conexión con el backend.'
+                    : 'No hay patios cargados en la muestra local.'}
               </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-              <div 
-                onClick={() => setActivePage({ name: 'map', patio: 3 })}
-                style={{ backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #40916c', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-              >
-                <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#40916c' }}>Patio 3</div>
-                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Pradera Sur y Pabellones</div>
-              </div>
-              <div 
-                onClick={() => setActivePage({ name: 'map', patio: 4 })}
-                style={{ backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #52b788', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-              >
-                <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#52b788' }}>Patio 4</div>
-                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Avenida Los Álamos</div>
-              </div>
-            </div>
-
-            <div 
-              onClick={() => setActivePage({ name: 'map', patio: 5 })}
-              style={{ backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '8px', borderLeft: '4px solid #74c69d', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-            >
-              <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#74c69d' }}>Patio 5</div>
-              <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Ampliación Moderna (Catastro 2026)</div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -241,20 +239,33 @@ export const HomePage = ({ setActivePage }) => {
               </button>
             </div>
 
-            <div style={{ borderRadius: '10px', overflow: 'hidden', height: '170px', marginBottom: '1.1rem', backgroundColor: '#e2e8f0' }}>
-              <img 
-                src={featuredMausoleo?.foto_url || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80"} 
-                alt="Mausoleo de la Familia Rivas"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            </div>
-
-            <h4 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f2d1e', marginBottom: '0.4rem' }}>
-              {featuredMausoleo?.nombre || "Mausoleo de la Familia Rivas"}
-            </h4>
-            <p style={{ fontSize: '0.84rem', color: '#64748b', lineHeight: '1.5', marginBottom: '1rem' }}>
-              {featuredMausoleo?.resena_historica || "Construido en 1933, es uno de los ejemplos más representativos de la arquitectura funeraria de nuestra ciudad."}
-            </p>
+            {featuredMausoleo ? (
+              <>
+                <div style={{ borderRadius: '10px', overflow: 'hidden', height: '170px', marginBottom: '1.1rem', backgroundColor: '#e2e8f0' }}>
+                  {featuredMausoleo.foto_url && (
+                    <img
+                      src={featuredMausoleo.foto_url}
+                      alt={featuredMausoleo.nombre}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  )}
+                </div>
+                <h4 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f2d1e', marginBottom: '0.4rem' }}>
+                  {featuredMausoleo.nombre}
+                </h4>
+                <p style={{ fontSize: '0.84rem', color: '#64748b', lineHeight: '1.5', marginBottom: '1rem' }}>
+                  {featuredMausoleo.resena_historica}
+                </p>
+              </>
+            ) : (
+              <div role="status" style={{ minHeight: '170px', display: 'grid', placeItems: 'center', color: '#64748b', textAlign: 'center' }}>
+                {isLoadingMausoleo
+                  ? 'Cargando mausoleos...'
+                  : mausoleoLoadError
+                    ? 'No se pudieron cargar los mausoleos. Revisa la conexión con el backend.'
+                    : 'Aún no hay mausoleos destacados en la muestra local.'}
+              </div>
+            )}
           </div>
 
           <button 

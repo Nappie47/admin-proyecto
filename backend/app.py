@@ -1,12 +1,13 @@
 import os
 from flask import Flask, jsonify
-from config import Config
+from config import Config, validate_security_config
 from extensions import db, jwt, cors
 from routes import auth_bp, user_bp, sepultura_bp, patio_bp, mausoleo_bp
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    validate_security_config(app.config)
 
     # Asegurar existencia de carpeta instance
     os.makedirs(os.path.join(app.root_path, 'instance'), exist_ok=True)
@@ -14,7 +15,10 @@ def create_app(config_class=Config):
     # Inicializar extensiones
     db.init_app(app)
     jwt.init_app(app)
-    cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
+    cors.init_app(
+        app,
+        resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", Config.CORS_ORIGINS)}}
+    )
 
     # Registrar blueprints
     app.register_blueprint(auth_bp)

@@ -20,6 +20,9 @@ const miniPinIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
+const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY;
+const detailMapUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
 export const GraveDetailPage = ({ graveId, setActivePage }) => {
   const [grave, setGrave] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -153,16 +156,6 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
             )}
           </div>
 
-          {/* Observaciones */}
-          <div style={{ marginBottom: '1.25rem' }}>
-            <span style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', marginBottom: '0.35rem' }}>
-              Observaciones
-            </span>
-            <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.84rem', color: '#475569', lineHeight: '1.5' }}>
-              {grave.observaciones || 'Sepultura de uso individual. Mantenimiento general en buen estado. Sin observaciones adicionales.'}
-            </div>
-          </div>
-
           {/* Ubicación y Registro */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.84rem' }}>
             <div>
@@ -172,7 +165,11 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
 
             <div>
               <span style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>Registrado en el sistema</span>
-              <span style={{ fontWeight: '600', color: '#334155' }}>{grave.created_at || '15 de marzo de 2020'}</span>
+              <span style={{ fontWeight: '600', color: '#334155' }}>
+                {grave.created_at
+                  ? new Date(grave.created_at).toLocaleDateString('es-CL')
+                  : 'Sin fecha registrada'}
+              </span>
             </div>
           </div>
         </div>
@@ -189,11 +186,11 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
               center={[grave.latitud, grave.longitud]}
               zoom={18}
               zoomControl={false}
-              attributionControl={false}
               style={{ width: '100%', height: '100%' }}
             >
-              <TileLayer 
-                url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" 
+              <TileLayer
+                attribution="&copy; CARTO &copy; OpenStreetMap"
+                url={cartoApiKey ? `${detailMapUrl}?key=${encodeURIComponent(cartoApiKey)}` : detailMapUrl}
                 maxZoom={20}
               />
               <Marker position={[grave.latitud, grave.longitud]} icon={miniPinIcon} />

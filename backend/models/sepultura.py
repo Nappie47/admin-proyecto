@@ -41,7 +41,7 @@ class Sepultura(db.Model):
         full = " ".join([p.strip() for p in parts if p.strip()])
         return full if full else "Sin asignar"
 
-    def to_dict(self):
+    def to_dict(self, include_observaciones=True):
         geom = None
         if self.geom_geojson:
             try:
@@ -49,7 +49,7 @@ class Sepultura(db.Model):
             except Exception:
                 geom = None
         
-        return {
+        data = {
             'id': self.id,
             'numero': self.numero,
             'patio_id': self.patio_id,
@@ -64,7 +64,6 @@ class Sepultura(db.Model):
             'nombre_completo': self.nombre_completo,
             'fecha_nacimiento': self.fecha_nacimiento.strftime('%Y-%m-%d') if self.fecha_nacimiento else None,
             'fecha_fallecimiento': self.fecha_fallecimiento.strftime('%Y-%m-%d') if self.fecha_fallecimiento else None,
-            'observaciones': self.observaciones or 'Mantenimiento general en buen estado. Sin observaciones adicionales.',
             'ubicacion_detalle': self.ubicacion_detalle or f"Patio {self.patio.numero if self.patio else 'N/A'}, Sector {self.sector}, Número {self.numero}",
             'latitud': self.latitud,
             'longitud': self.longitud,
@@ -73,6 +72,9 @@ class Sepultura(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             'updated_at': self.updated_at.strftime('%Y-%m-%d') if self.updated_at else None
         }
+        if include_observaciones:
+            data['observaciones'] = self.observaciones
+        return data
 
     def to_geojson_feature(self):
         geom = None

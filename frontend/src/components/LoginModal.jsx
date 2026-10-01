@@ -30,7 +30,7 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
   const handleDemoFill = (role) => {
     if (role === 'admin') {
       setIdentifier('admin@losangeles.cl');
-      setPassword('Admin123!');
+      setPassword('AdminPassword123!');
     } else {
       setIdentifier('funcionario@losangeles.cl');
       setPassword('Funcionario123!');

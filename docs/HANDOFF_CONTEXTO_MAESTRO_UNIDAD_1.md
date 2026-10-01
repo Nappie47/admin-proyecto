@@ -157,10 +157,7 @@ curl http://127.0.0.1/api/health
   ```bash
   journalctl -u cementerio-backend -f -n 50
   ```
-- **Poblar la base de datos por consola:**
-  ```bash
-  curl -X POST http://127.0.0.1/api/patios/bootstrap
-  ```
+- **Inicialización automática:** el endpoint `/api/patios/bootstrap` está deshabilitado porque podía sobrescribir patios y cuentas existentes y generar sepulturas ficticias. Registra los datos reales mediante las funciones de administración; no uses ese endpoint para poblar la base.
 
 ---
 

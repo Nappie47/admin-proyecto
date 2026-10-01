@@ -1,123 +1,91 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Landmark, Search, Map, Shield, User, LogIn, LogOut, BookOpen, LayoutDashboard, Edit3 } from 'lucide-react';
+import { Leaf, Search, Map, User, LogIn, LogOut, BookOpen, LayoutDashboard, Home, Menu, X, TreePine } from 'lucide-react';
 
 export const Navbar = ({ activePage, setActivePage, openLoginModal }) => {
-  const { user, role, isAuthenticated, logout, isFuncionario, isAdmin } = useAuth();
-  const [quickSearch, setQuickSearch] = useState('');
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (quickSearch.trim()) {
-      setActivePage({ name: 'search', query: quickSearch.trim() });
-    }
-  };
+  const { role, isAuthenticated, logout, isFuncionario } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <header className="navbar">
-      <div 
-        className="nav-brand" 
-        onClick={() => setActivePage({ name: 'home' })}
-        style={{ cursor: 'pointer' }}
-      >
-        <div className="brand-icon-wrapper">
-          <Landmark size={24} />
-        </div>
-        <div>
-          <div className="brand-title">Cementerio Municipal</div>
-          <div className="brand-subtitle">Sistema de Información Geográfica • Los Ángeles</div>
-        </div>
-      </div>
+    <>
+      <header className="navbar">
+        <button
+          type="button"
+          className="mobile-menu-button"
+          aria-label={sidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+        >
+          {sidebarOpen ? <X size={21} /> : <Menu size={21} />}
+        </button>
+        <button
+          type="button"
+          className="nav-brand"
+          onClick={() => {
+            setActivePage({ name: 'home' });
+            setSidebarOpen(false);
+          }}
+        >
+          <span className="brand-icon-wrapper"><Leaf size={24} /></span>
+          <span>
+            <span className="brand-title">Cementerio Municipal</span>
+            <span className="brand-subtitle">Sistema de Información Geográfica</span>
+          </span>
+        </button>
 
-      <nav className="nav-links">
-        <button 
-          className={`nav-link ${activePage.name === 'home' ? 'active' : ''}`}
-          onClick={() => setActivePage({ name: 'home' })}
-        >
-          Inicio
-        </button>
-        <button 
-          className={`nav-link ${activePage.name === 'search' ? 'active' : ''}`}
-          onClick={() => setActivePage({ name: 'search' })}
-        >
-          <Search size={16} />
-          Buscar sepultura
-        </button>
-        <button 
-          className={`nav-link ${activePage.name === 'map' && !activePage.openEditor ? 'active' : ''}`}
-          onClick={() => setActivePage({ name: 'map', openEditor: false })}
-        >
-          <Map size={16} />
-          Mapa
-        </button>
-        <button 
-          className={`nav-link ${activePage.name === 'map' && activePage.openEditor ? 'active' : ''}`}
-          onClick={() => setActivePage({ name: 'map', openEditor: true })}
-          style={{ color: '#166534', fontWeight: '700' }}
-        >
-          <Edit3 size={16} />
-          Editor de Patios SIG
-        </button>
-        <button 
-          className={`nav-link ${activePage.name === 'mausoleos' ? 'active' : ''}`}
-          onClick={() => setActivePage({ name: 'mausoleos' })}
-        >
-          <BookOpen size={16} />
-          Mausoleos históricos
-        </button>
-        {isFuncionario && (
-          <button 
-            className={`nav-link ${activePage.name === 'admin' ? 'active' : ''}`}
-            onClick={() => setActivePage({ name: 'admin' })}
+        <div className="nav-actions">
+          <button
+            type="button"
+            className="nav-icon-button"
+            aria-label="Buscar sepultura"
+            onClick={() => setActivePage({ name: 'search' })}
           >
-            <LayoutDashboard size={16} />
-            Administración
+            <Search size={20} />
           </button>
-        )}
-      </nav>
-
-      <div className="nav-actions">
-        <form onSubmit={handleSearchSubmit} style={{ position: 'relative' }}>
-          <input
-            type="text"
-            placeholder="Buscar sepultura..."
-            value={quickSearch}
-            onChange={(e) => setQuickSearch(e.target.value)}
-            className="form-input"
-            style={{ width: '180px', paddingRight: '2rem', height: '36px', fontSize: '0.84rem' }}
-          />
-          <Search 
-            size={14} 
-            style={{ position: 'absolute', right: '10px', top: '11px', color: '#94a3b8' }} 
-          />
-        </form>
-
-        <div className={`role-badge ${role}`}>
-          <User size={14} />
-          <span>{role === 'administrador' ? 'Administrador' : (role === 'funcionario' ? 'Funcionario' : 'Público')}</span>
+          <div className={`role-badge ${role}`}>
+            <User size={16} />
+            <span>{role === 'administrador' ? 'Administrador' : (role === 'funcionario' ? 'Funcionario' : 'Público')}</span>
+          </div>
+          {isAuthenticated ? (
+            <button onClick={logout} className="btn-primary nav-session-button" title="Cerrar sesión">
+              <LogOut size={15} />
+              Cerrar sesión
+            </button>
+          ) : (
+            <button onClick={openLoginModal} className="btn-primary nav-session-button">
+              <LogIn size={15} />
+              Iniciar sesión
+            </button>
+          )}
         </div>
+      </header>
 
-        {isAuthenticated ? (
-          <button 
-            onClick={logout} 
-            className="btn-secondary" 
-            title="Cerrar sesión"
-            style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem' }}
-          >
-            <LogOut size={15} />
-            Cerrar sesión
+      <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <nav className="sidebar-links" aria-label="Navegación principal">
+          <button className={`nav-link ${activePage.name === 'home' ? 'active' : ''}`} onClick={() => { setActivePage({ name: 'home' }); setSidebarOpen(false); }}>
+            <Home size={19} /> Inicio
           </button>
-        ) : (
-          <button 
-            onClick={openLoginModal} 
-            className="btn-primary"
-            style={{ padding: '0.45rem 1.1rem', fontSize: '0.84rem' }}
-          >
-            <LogIn size={15} />
-            Iniciar sesión
+          <button className={`nav-link ${activePage.name === 'search' ? 'active' : ''}`} onClick={() => { setActivePage({ name: 'search' }); setSidebarOpen(false); }}>
+            <Search size={19} /> Buscar sepultura
           </button>
-        )}
-      </div>
-    </header>
+          <button className={`nav-link ${activePage.name === 'map' ? 'active' : ''}`} onClick={() => { setActivePage({ name: 'map' }); setSidebarOpen(false); }}>
+            <Map size={19} /> Mapa
+          </button>
+          <button className={`nav-link ${activePage.name === 'mausoleos' ? 'active' : ''}`} onClick={() => { setActivePage({ name: 'mausoleos' }); setSidebarOpen(false); }}>
+            <BookOpen size={19} /> Mausoleos históricos
+          </button>
+          {isFuncionario && (
+            <button className={`nav-link ${activePage.name === 'admin' ? 'active' : ''}`} onClick={() => { setActivePage({ name: 'admin' }); setSidebarOpen(false); }}>
+              <LayoutDashboard size={19} /> Administración
+            </button>
+          )}
+        </nav>
+        <div className="sidebar-memory">
+          <TreePine size={42} strokeWidth={1.35} />
+          <span>Memoria que<br />nos une</span>
+          <i />
+        </div>
+      </aside>
+      {sidebarOpen && <button type="button" className="sidebar-backdrop" aria-label="Cerrar menú" onClick={() => setSidebarOpen(false)} />}
+    </>
   );
 };

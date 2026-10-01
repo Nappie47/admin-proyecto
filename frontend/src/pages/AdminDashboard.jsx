@@ -2,24 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, Layers, Landmark, BarChart2, Settings, Plus, Search, 
   RotateCcw, Edit2, Trash2, CheckCircle2, AlertTriangle, ShieldCheck, UserPlus,
-  Map, Database, Sparkles, RefreshCw
+  Map, Database
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { sepulturaService, userService, mausoleoService, patioService } from '../services/api';
 import { GraveModal } from '../components/GraveModal';
 import { UserModal } from '../components/UserModal';
 
-export const AdminDashboard = ({ setActivePage }) => {
+export const AdminDashboard = ({ initialTab, setActivePage }) => {
   const { user, isAdmin, isFuncionario } = useAuth();
 
   const [activeTab, setActiveTab] = useState('sepulturas'); // 'sepulturas', 'usuarios', 'mausoleos'
   const [stats, setStats] = useState({
-    total_sepulturas: 1248,
-    disponibles: 312,
-    ocupadas: 936,
-    pct_disponibles: 25.0,
-    pct_ocupadas: 75.0,
-    mausoleos_historicos: 12
+    total_sepulturas: 0,
+    disponibles: 0,
+    ocupadas: 0,
+    pct_disponibles: 0,
+    pct_ocupadas: 0,
+    mausoleos_historicos: 0
   });
 
   // Sepulturas State
@@ -37,7 +37,8 @@ export const AdminDashboard = ({ setActivePage }) => {
 
   // Patios State
   const [patiosList, setPatiosList] = useState([]);
-  const [isBootstrapping, setIsBootstrapping] = useState(false);
+  const [patiosLoading, setPatiosLoading] = useState(true);
+  const [patiosError, setPatiosError] = useState(null);
 
   // Modals state
   const [isGraveModalOpen, setIsGraveModalOpen] = useState(false);
@@ -61,13 +62,20 @@ export const AdminDashboard = ({ setActivePage }) => {
 
   // Load patios
   const fetchPatios = async () => {
+    setPatiosLoading(true);
+    setPatiosError(null);
     try {
       const res = await patioService.list();
       if (res.data.success) {
         setPatiosList(res.data.patios);
+      } else {
+        throw new Error(res.data.error || 'No se pudo confirmar la lista de patios.');
       }
     } catch (err) {
       console.error('Error cargando patios:', err);
+      setPatiosError(err.response?.data?.error || err.message || 'No se pudieron cargar los patios. Revisa la conexión con el backend.');
+    } finally {
+      setPatiosLoading(false);
     }
   };
 
@@ -109,7 +117,7 @@ export const AdminDashboard = ({ setActivePage }) => {
   };
 
   const handleDeletePatio = async (id, numero) => {
-    if (!window.confirm(`¿Está seguro de eliminar el Patio ${numero}? Se eliminará de la base de datos PostgreSQL.`)) return;
+    if (!window.confirm(`¿Está seguro de eliminar el Patio ${numero}?`)) return;
     try {
       await patioService.delete(id);
       setNotification({ type: 'success', message: `Patio ${numero} eliminado exitosamente.` });
@@ -120,31 +128,20 @@ export const AdminDashboard = ({ setActivePage }) => {
     }
   };
 
-  const handleBootstrap = async () => {
-    if (!window.confirm('¿Desea inicializar los 5 Patios Oficiales y Usuario Admin en PostgreSQL (10.0.3.10:5000)?')) return;
-    setIsBootstrapping(true);
-    try {
-      const res = await patioService.bootstrap();
-      if (res.data.success) {
-        setNotification({ type: 'success', message: '¡Base de datos poblada exitosamente en 10.0.3.10:5000!' });
-        fetchPatios();
-        fetchStats();
-        fetchSepulturas(1);
-        if (isAdmin) fetchUsers();
-      }
-    } catch (err) {
-      setNotification({ type: 'error', message: err.response?.data?.error || 'Error poblando base de datos' });
-    } finally {
-      setIsBootstrapping(false);
-    }
-  };
-
   useEffect(() => {
     fetchStats();
     fetchPatios();
     fetchSepulturas(1);
     if (isAdmin) fetchUsers();
   }, [filterPatio, filterTipo, filterEstado]);
+
+  useEffect(() => {
+    if (initialTab && ['sepulturas', 'usuarios', 'patios'].includes(initialTab)) {
+      setActiveTab(initialTab);
+      if (initialTab === 'usuarios') fetchUsers();
+      if (initialTab === 'patios') fetchPatios();
+    }
+  }, [initialTab]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -245,7 +242,7 @@ export const AdminDashboard = ({ setActivePage }) => {
               <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f2d1e' }}>{stats.total_sepulturas}</div>
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>En todo el cementerio</div>
+          <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>En la muestra del piloto</div>
         </div>
 
         {/* Card 2: Disponibles */}
@@ -291,7 +288,7 @@ export const AdminDashboard = ({ setActivePage }) => {
               <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#b45309' }}>{stats.mausoleos_historicos}</div>
             </div>
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Registrados en el catastro (40)</div>
+          <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>En la muestra cargada</div>
         </div>
       </div>
 
@@ -357,7 +354,7 @@ export const AdminDashboard = ({ setActivePage }) => {
                 Listado de sepulturas
               </h3>
               <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                Consulta, filtra y administra todas las sepulturas del cementerio.
+                Consulta, filtra y administra las sepulturas incluidas en la muestra del piloto.
               </p>
             </div>
 
@@ -388,11 +385,11 @@ export const AdminDashboard = ({ setActivePage }) => {
             <div>
               <select value={filterPatio} onChange={(e) => setFilterPatio(e.target.value)} className="form-select" style={{ width: '100%' }}>
                 <option value="Todos">Patio: Todos</option>
-                <option value="1">Patio 1</option>
-                <option value="2">Patio 2</option>
-                <option value="3">Patio 3</option>
-                <option value="4">Patio 4</option>
-                <option value="5">Patio 5</option>
+                {patiosList.map(patio => (
+                  <option key={patio.id} value={patio.numero}>
+                    Patio {patio.numero}{patio.nombre ? ` — ${patio.nombre}` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -438,7 +435,13 @@ export const AdminDashboard = ({ setActivePage }) => {
                 </tr>
               </thead>
               <tbody>
-                {sepulturas.map((s) => (
+                {sepulturas.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b' }}>
+                      No hay sepulturas que mostrar en la muestra cargada.
+                    </td>
+                  </tr>
+                ) : sepulturas.map((s) => (
                   <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '0.85rem 1rem', fontWeight: '700', color: '#0f2d1e' }}>{s.numero}</td>
                     <td style={{ padding: '0.85rem 1rem' }}>Patio {s.patio_numero}</td>
@@ -537,37 +540,18 @@ export const AdminDashboard = ({ setActivePage }) => {
                 Patios Topográficos y Límites
               </h3>
               <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
-                Catastro de sectores perimetrales. Conexión directa a PostgreSQL (10.0.3.10:5000).
+                Administra los sectores que forman parte de la muestra del proyecto.
               </p>
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button
-                type="button"
-                onClick={handleBootstrap}
-                disabled={isBootstrapping}
-                className="btn-secondary"
-                style={{ fontSize: '0.84rem' }}
-              >
-                {isBootstrapping ? (
-                  <>
-                    <RefreshCw size={15} className="animate-spin" />
-                    Poblando en 10.0.3.10:5000...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={15} color="#16a34a" />
-                    Poblar 5 Patios & Admin en DB
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => setActivePage({ name: 'map' })}
+                onClick={() => setActivePage({ name: 'map', openEditor: true })}
                 className="btn-primary"
                 style={{ fontSize: '0.84rem' }}
               >
                 <Map size={16} />
-                Abrir Editor Satelital en Mapa
+                Delimitar en mapa
               </button>
             </div>
           </div>
@@ -584,11 +568,31 @@ export const AdminDashboard = ({ setActivePage }) => {
               </tr>
             </thead>
             <tbody>
-              {patiosList.length === 0 ? (
+              {patiosLoading ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                    Cargando patios...
+                  </td>
+                </tr>
+              ) : patiosError ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#991b1b' }}>
+                    <div role="alert">{patiosError}</div>
+                    <button
+                      type="button"
+                      onClick={fetchPatios}
+                      className="btn-secondary"
+                      style={{ marginTop: '0.75rem' }}
+                    >
+                      Reintentar
+                    </button>
+                  </td>
+                </tr>
+              ) : patiosList.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                     No se han registrado patios en la base de datos.<br />
-                    Haz clic en <strong>"Poblar 5 Patios & Admin en DB"</strong> o abre el Editor en el Mapa.
+                    Abre el mapa satelital para delimitar los sectores reales de la muestra.
                   </td>
                 </tr>
               ) : (
@@ -620,7 +624,7 @@ export const AdminDashboard = ({ setActivePage }) => {
                     <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
                         <button
-                          onClick={() => setActivePage({ name: 'map' })}
+                          onClick={() => setActivePage({ name: 'map', openEditor: true, selectedPatioId: p.id })}
                           title="Editar en el mapa interactivo"
                           className="btn-secondary"
                           style={{ padding: '0.35rem 0.6rem', fontSize: '0.78rem' }}
@@ -630,7 +634,7 @@ export const AdminDashboard = ({ setActivePage }) => {
                         </button>
                         <button
                           onClick={() => handleDeletePatio(p.id, p.numero)}
-                          title="Eliminar patio de PostgreSQL"
+                          title="Eliminar patio"
                           style={{ background: 'none', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.35rem', cursor: 'pointer', color: '#dc2626' }}
                         >
                           <Trash2 size={15} />
@@ -720,6 +724,14 @@ export const AdminDashboard = ({ setActivePage }) => {
         isOpen={isGraveModalOpen}
         onClose={() => setIsGraveModalOpen(false)}
         sepultura={editingGrave}
+        patios={patiosList}
+        patiosLoading={patiosLoading}
+        patiosError={patiosError}
+        onRetryPatios={fetchPatios}
+        onCreatePatio={() => {
+          setIsGraveModalOpen(false);
+          setActivePage({ name: 'map', openEditor: true });
+        }}
         onSaved={() => {
           fetchStats();
           fetchSepulturas(currentPage);

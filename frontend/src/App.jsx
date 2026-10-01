@@ -21,11 +21,11 @@ export function AppContent() {
       case 'search':
         return <SearchPage initialQuery={activePage.query} setActivePage={setActivePage} />;
       case 'map':
-        return <MapPage initialGraveId={activePage.selectedGraveId} initialOpenEditor={activePage.openEditor} setActivePage={setActivePage} />;
+        return <MapPage initialGraveId={activePage.selectedGraveId} initialPatioId={activePage.selectedPatioId} initialOpenEditor={activePage.openEditor} setActivePage={setActivePage} />;
       case 'detail':
         return <GraveDetailPage graveId={activePage.id} setActivePage={setActivePage} />;
       case 'admin':
-        return <AdminDashboard setActivePage={setActivePage} />;
+        return <AdminDashboard initialTab={activePage.tab} setActivePage={setActivePage} />;
       case 'mausoleos':
         return <MausoleumsPage setActivePage={setActivePage} />;
       default:
@@ -34,7 +34,7 @@ export function AppContent() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${activePage.name === 'map' ? 'map-screen' : ''}`}>
       <Navbar
         activePage={activePage}
         setActivePage={setActivePage}
@@ -45,7 +45,7 @@ export function AppContent() {
         {renderCurrentPage()}
       </main>
 
-      <Footer />
+      {activePage.name !== 'map' && <Footer />}
 
       <LoginModal
         isOpen={isLoginModalOpen}

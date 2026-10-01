@@ -38,7 +38,6 @@ export const patioService = {
   create: (data) => api.post('/patios', data),
   update: (id, data) => api.put(`/patios/${id}`, data),
   delete: (id) => api.delete(`/patios/${id}`),
-  bootstrap: () => api.post('/patios/bootstrap'),
 };
 
 export const mausoleoService = {
