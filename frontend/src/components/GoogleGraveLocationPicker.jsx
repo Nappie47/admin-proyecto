@@ -23,8 +23,12 @@ export default function GoogleGraveLocationPicker({
     : [];
 
   const handlePick = (event) => {
-    const point = event.detail?.latLng;
-    if (point) onPick(point.lat, point.lng);
+    const point = event.detail?.latLng || event.latLng;
+    if (!point) return;
+
+    const lat = typeof point.lat === 'function' ? point.lat() : point.lat;
+    const lng = typeof point.lng === 'function' ? point.lng() : point.lng;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) onPick(lat, lng);
   };
 
   return (
