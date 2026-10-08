@@ -1,159 +1,86 @@
-# Plataforma Web y SIG - Cementerio General Comuna de Los Ángeles
-## Unidad 1: Despliegue en Máquinas Virtuales en Google Cloud Platform (Sin Docker)
-**Licitación Mercado Público:** 2411-8-LE25  
-**Autores:** Bryan Ahumada - Johan Muñoz  
-**Rama:** `unidad-1`  
+# Sistema de Información Geográfica - Cementerio General de Los Ángeles
+## Administración de Redes y Servidores - Unidad 1
+
+**Integrantes:**
+- Bryan Ahumada
+- Johan Muñoz
 
 ---
 
-## 🏛️ Descripción del Proyecto (Unidad 1)
+## Descripción del Proyecto
 
-Modernización del sistema de información del Cementerio General de Los Ángeles mediante una plataforma web integrada que unifica la gestión alfanumérica con la visualización geoespacial de sepulturas, actualización topográfica de 5 patios sobre el **recinto real del cementerio** (Camino San Antonio s/n / Av. Gabriela Mistral) y catastro patrimonial de mausoleos emblemáticos.
+Este proyecto consiste en el desarrollo e implementación de un Sistema de Información Geográfica (SIG) y plataforma de gestión para el Cementerio General de la Comuna de Los Ángeles. Permite la administración de registros de sepulturas, catastro patrimonial de mausoleos y la delimitación cartográfica interactiva de sectores y patios sobre imágenes satelitales.
 
-Para la **Unidad 1**, todos los servicios se ejecutan de forma **nativa sobre el sistema operativo (Debian 12/13)** en 6 Máquinas Virtuales independientes en Google Cloud Compute Engine, prescindiendo del uso de Docker y garantizando **Alta Disponibilidad**, **Failover Automático** y **Cero Pérdida de Datos**.
-
-*(Nota: La versión basada en contenedores Docker se encuentra preservada en la rama `main` para la Unidad 2).*
+Para esta Unidad 1, el sistema está desplegado de forma nativa sobre máquinas virtuales con sistema operativo Debian 13 en Google Cloud Platform, implementando alta disponibilidad tanto a nivel de aplicación como en la base de datos sin utilizar contenedores.
 
 ---
 
-## 🏗️ Topología de Red y Arquitectura por Capas
+## Arquitectura de Servidores (GCP)
 
-```
-[ INTERNET ]
-     │ (Puerto 80 HTTP)
-     ▼
-[ VM 1: vm-web-haproxy ] (IP Pública: 35.209.139.3 / IP Interna: 10.0.1.10)
-     │ 
-     │ (Puerto 80 HTTP - Balanceo L7 Round Robin con Healthcheck /api/health)
-     ├────────────────────────────────────────┐
-     ▼                                        ▼
-[ VM 2: vm-app-1 ] (10.0.2.11)             [ VM 3: vm-app-2 ] (10.0.2.12)
-(Nginx + React + Flask Gunicorn)           (Nginx + React + Flask Gunicorn)
-     │                                        │
-     └───────────────────┬────────────────────┘
-                         │ (Puerto 5000 TCP - Consultas SQL)
-                         ▼
-             [ VM 4: vm-db-haproxy ] (10.0.3.10)
-             (HAProxy L4 TCP + etcd node-4 + Dashboard :7000)
-                         │
-                         ├────────────────────────────────────────┐
-                         │ (Puerto 5432 SQL Master)               │ (Puerto 5432 SQL Réplica)
-                         ▼                                        ▼
-             [ VM 5: vm-db-master ] (10.0.3.11)       [ VM 6: vm-db-replica ] (10.0.3.12)
-             (PostgreSQL 17 + PostGIS 3.5             (PostgreSQL 17 + PostGIS 3.5
-              + Patroni node-5 + etcd node-5)          + Patroni node-6 + etcd node-6)
-                         │                                        ▲
-                         └──────── WAL Streaming Replication ─────┘
-                                  (Lag: 0 MB en tiempo real)
-```
+La infraestructura se compone de 6 máquinas virtuales distribuidas en tres redes privadas conectadas mediante VPC Peering:
+
+| Máquina Virtual | IP Interna | Rol / Servicio Principal |
+| :--- | :--- | :--- |
+| **vm-web-haproxy** | `10.0.1.10` | Balanceador de carga web L7 (HAProxy) con IP pública. |
+| **vm-app-1** | `10.0.2.11` | Servidor de aplicación principal (Nginx, React 18, Flask API, Gunicorn). |
+| **vm-app-2** | `10.0.2.12` | Servidor de aplicación réplica (Nginx, React 18, Flask API, Gunicorn). |
+| **vm-db-haproxy** | `10.0.3.10` | Enrutador TCP (HAProxy) a la base de datos y nodo árbitro de etcd. |
+| **vm-db-master** | `10.0.3.11` | Base de datos primaria (PostgreSQL 17, PostGIS 3.5, Patroni, etcd). |
+| **vm-db-replica** | `10.0.3.12` | Base de datos réplica standby con auto-promoción (Patroni, etcd). |
 
 ---
 
-## 📋 Dimensionamiento de Máquinas Virtuales (GCP - Mínimo Costo)
+## Tecnologías Utilizadas
 
-Todas las instancias fueron dimensionadas en **`us-central1`** bajo el modelo **Spot / Preemptible** para reducir el costo a menos de **$3 USD** por toda la unidad:
-
-| Máquina Virtual | Rol en la Arquitectura | Tipo GCP | vCPU / RAM | Disco | Red VPC | IP Interna |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **VM 1: `vm-web-haproxy`** | Balanceador Web Ingress | `e2-micro` | 2 vCPU / 1 GB | 10 GB | `subnet-publica` | `10.0.1.10` (con IP Externa) |
-| **VM 2: `vm-app-1`** | Servidor App 1 (Frontend + API) | `e2-small` | 2 vCPU / 2 GB | 15 GB | `subnet-app` | `10.0.2.11` |
-| **VM 3: `vm-app-2`** | Servidor App 2 (Réplica App) | `e2-small` | 2 vCPU / 2 GB | 15 GB | `subnet-app` | `10.0.2.12` |
-| **VM 4: `vm-db-haproxy`** | Proxy / Árbitro DB | `e2-micro` | 2 vCPU / 1 GB | 10 GB | `subnet-db` | `10.0.3.10` |
-| **VM 5: `vm-db-master`** | DB Leader / Patroni | `e2-small` | 2 vCPU / 2 GB | 20 GB | `subnet-db` | `10.0.3.11` |
-| **VM 6: `vm-db-replica`** | DB Standby / Patroni | `e2-small` | 2 vCPU / 2 GB | 20 GB | `subnet-db` | `10.0.3.12` |
+- **Sistema Operativo:** Debian 13 (Trixie) GNU/Linux.
+- **Frontend:** React 18, Vite, Leaflet, Google Maps API.
+- **Backend:** Python 3.13, Flask, SQLAlchemy, Gunicorn.
+- **Base de Datos Espacial:** PostgreSQL 17 + PostGIS 3.5.
+- **Alta Disponibilidad y Failover:** Patroni 3.x, etcd 3.5.
+- **Balanceo y Proxy:** HAProxy 2.8, Nginx.
+- **Autenticación:** JWT (JSON Web Tokens) con contraseñas encriptadas en bcrypt.
 
 ---
 
-## 🗂️ Estructura del Repositorio (Organizado por VM Independiente)
+## Estructura del Repositorio
 
-```
-admin-proyecto/
-├── docs/                                  # Documentación técnica completa
-│   ├── CAPA-DATOS-HA-PATRONI-GCP.md       # Documento exhaustivo del clúster de Base de Datos
-│   └── GUIA-GCP-BAJO-COSTO.md             # Guía de optimización de costos en GCP
-├── vms/                                   # Configuraciones y Scripts Nativos por VM
-│   ├── vm-1-haproxy-web/                  # Capa 1: Ingress Web L7
-│   │   ├── haproxy.cfg                    # Balanceador L7 hacia 10.0.2.11 y 10.0.2.12
-│   │   └── setup.sh                       # Script de instalación para VM 1
-│   ├── vm-2-app-principal/                # Capa 2: Servidor App 1
-│   │   ├── nginx.conf                     # Nginx Reverse Proxy
-│   │   ├── cementerio-backend.service     # Systemd Service para Gunicorn Flask
-│   │   ├── .env                           # Variables de entorno
-│   │   └── setup.sh                       # Script de instalación para VM 2
-│   ├── vm-3-app-replica/                  # Capa 2: Servidor App 2 (Réplica)
-│   │   ├── nginx.conf                     # Nginx Reverse Proxy
-│   │   ├── cementerio-backend.service     # Systemd Service para Gunicorn Flask
-│   │   ├── .env                           # Variables de entorno
-│   │   └── setup.sh                       # Script de instalación para VM 3
-│   ├── vm-4-haproxy-db/                   # Capa 3: Proxy Inverso de BD
-│   │   ├── haproxy.cfg                    # HAProxy TCP con chequeos HTTP Patroni :8008
-│   │   ├── etcd.default                   # Configuración etcd node-4 (Árbitro)
-│   │   └── setup.sh                       # Script de instalación para VM 4
-│   ├── vm-5-db-primaria/                  # Capa 4: PostgreSQL Master
-│   │   ├── config.yml                     # Patroni node-5 config
-│   │   ├── etcd.default                   # Configuración etcd node-5
-│   │   ├── init.sql                       # Script de creación cementerio_db y postgis
-│   │   └── setup.sh                       # Script de instalación para VM 5
-│   └── vm-6-db-replica/                   # Capa 4: PostgreSQL Réplica
-│       ├── config.yml                     # Patroni node-6 config
-│       ├── etcd.default                   # Configuración etcd node-6
-│       └── setup.sh                       # Script de instalación para VM 6
-├── backend/                               # Código fuente Python Flask API REST
-└── frontend/                              # Código fuente React 18 + Leaflet (Google Satélite)
+```text
+├── backend/            # Código fuente de la API REST en Flask y modelos ORM
+│   ├── models/         # Modelos de base de datos (Usuario, Sepultura, Patio, Mausoleo)
+│   ├── routes/         # Endpoints de la API (auth, sepulturas, patios, mausoleos)
+│   └── tests/          # Pruebas unitarias de la API
+├── frontend/           # Aplicación web SPA en React
+│   └── src/            # Componentes, vistas y servicios de conexión
+└── vms/                # Archivos de configuración de los servicios para cada VM
+    ├── vm-1-haproxy-web/
+    ├── vm-2-app-principal/
+    ├── vm-3-app-replica/
+    ├── vm-4-haproxy-db/
+    ├── vm-5-db-primaria/
+    └── vm-6-db-replica/
 ```
 
 ---
 
-## ⚡ Guía de Despliegue Rápido en las VMs (Orden Bottom-Up)
+## Despliegue y Comandos de Servicio
 
-El despliegue se realiza **desde la base de datos hacia el balanceador web**:
+Cada servicio se ejecuta de manera nativa mediante `systemd`:
 
-### 1. Capa de Base de Datos (VM 5, VM 6 y VM 4)
-* **En VM 5 (`vm-db-master`):**
+- **En servidores de aplicación (VM 2 y VM 3):**
   ```bash
-  git clone -b unidad-1 https://github.com/Nappie47/admin-proyecto.git
-  cd admin-proyecto/vms/vm-5-db-primaria && chmod +x setup.sh && sudo ./setup.sh
-  ```
-* **En VM 6 (`vm-db-replica`):**
-  ```bash
-  git clone -b unidad-1 https://github.com/Nappie47/admin-proyecto.git
-  cd admin-proyecto/vms/vm-6-db-replica && chmod +x setup.sh && sudo ./setup.sh
-  ```
-* **En VM 4 (`vm-db-haproxy`):**
-  ```bash
-  git clone -b unidad-1 https://github.com/Nappie47/admin-proyecto.git
-  cd admin-proyecto/vms/vm-4-haproxy-db && chmod +x setup.sh && sudo ./setup.sh
+  sudo systemctl status cementerio-backend
+  sudo systemctl status nginx
   ```
 
-### 2. Capa de Aplicación (VM 2 y VM 3)
-* **En VM 2 (`vm-app-1`):**
+- **En el balanceador de base de datos (VM 4):**
   ```bash
-  git clone -b unidad-1 https://github.com/Nappie47/admin-proyecto.git
-  cd admin-proyecto/vms/vm-2-app-principal && chmod +x setup.sh && sudo ./setup.sh
-  ```
-* **En VM 3 (`vm-app-2`):**
-  ```bash
-  git clone -b unidad-1 https://github.com/Nappie47/admin-proyecto.git
-  cd admin-proyecto/vms/vm-3-app-replica && chmod +x setup.sh && sudo ./setup.sh
+  sudo systemctl status haproxy
+  sudo systemctl status etcd
   ```
 
-### 3. Capa Web Ingress (VM 1)
-* **En VM 1 (`vm-web-haproxy`):**
+- **En los nodos de base de datos (VM 5 y VM 6):**
   ```bash
-  git clone -b unidad-1 https://github.com/Nappie47/admin-proyecto.git
-  cd admin-proyecto/vms/vm-1-haproxy-web && chmod +x setup.sh && sudo ./setup.sh
+  sudo systemctl status patroni
+  # Ver estado del clúster de base de datos
+  patronictl -c /etc/patroni/config.yml list
   ```
-
----
-
-## 🌐 URLs de Acceso y Credenciales
-
-* **Portal Web Público (Ingress HAProxy):** `http://35.209.139.3`
-* **Estadísticas de Tráfico Web:** `http://35.209.139.3/haproxy?stats`
-* **Estadísticas de Tráfico Base de Datos:** `http://10.0.3.10:7000` (o mediante su IP pública temporal)
-
-### Credenciales del Sistema:
-* **Administrador General:** `admin@losangeles.cl` / `Admin123!`
-* **Funcionario Catastro:** `funcionario@losangeles.cl` / `Funcionario123!`
-* **Técnico Terreno:** `terreno@losangeles.cl` / `Terreno123!`
-* **Base de Datos PostgreSQL:** Usuario `app_user` / Contraseña `AppPassword123!` / DB `cementerio_db`
