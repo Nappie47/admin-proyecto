@@ -1,0 +1,186 @@
+version: '3.8'
+
+# ==============================================================================
+# ORQUESTADOR DOCKER SWARM - ALTA DISPONIBILIDAD Y AUTO-HEALING NATIVO
+# Plataforma Web y SIG - Cementerio General Comuna de Los Ángeles
+# (Licitación Mercado Público: 2411-8-LE25)
+# ==============================================================================
+
+networks:
+  cementerio_net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  pgdata_primary:
+  pgdata_replica:
+  backups_storage:
+
+configs:
+  web_haproxy_cfg_v1:
+    file: ./swarm/haproxy-web.cfg
+  db_haproxy_cfg_v1:
+    file: ./swarm/haproxy-db.cfg
+  db_init_sql_v1:
+    file: ./vms/vm-5-db-primaria/init/01-init-postgis.sql
+
+services:
+  # ============================================================================
+  # CAPA 1: INGRESS WEB BALANCER (DOCKER SWARM ROUTING MESH + REPLICAS: 2)
+  # Ambas réplicas de HAProxy atienden el mismo puerto 8000 a través del Swarm VIP.
+  # Si matas un contenedor, el otro sigue respondiendo en el puerto 8000 sin caída.
+  # ============================================================================
+  web_balancer:
+    image: haproxy:2.8-alpine
+    ports:
+      - target: 80
+        published: 8000
+        mode: ingress
+      - target: 8404
+        published: 8404
+        mode: ingress
+    configs:
+      - source: web_haproxy_cfg_v1
+        target: /usr/local/etc/haproxy/haproxy.cfg
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 5s
+
+  # ============================================================================
+  # CAPA 2: FRONTEND REACT SPA (REPLICAS: 2)
+  # Servido por Nginx con proxy inverso balanceado hacia el cluster de backend.
+  # ============================================================================
+  app_frontend:
+    image: cementerio-frontend:latest
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 5s
+
+  # ============================================================================
+  # CAPA 2: BACKEND PYTHON FLASK GUNICORN (REPLICAS: 2)
+  # Balanceado automáticamente vía el Swarm Virtual IP de app_backend.
+  # ============================================================================
+  app_backend:
+    image: cementerio-backend:latest
+    environment:
+      SECRET_KEY: "CementerioLosAngeles2026SecretKey!"
+      JWT_SECRET_KEY: "JwtSecretKeyCementerio2026!"
+      DATABASE_URL: "postgresql://app_user:AppPassword123!@db_balancer:5000/cementerio_db"
+      PORT: "5000"
+      FLASK_ENV: "production"
+      APP_ENV: "development"
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 5s
+
+  # ============================================================================
+  # CAPA 3: BALANCEADOR DE BASE DE DATOS (HAProxy L4 TCP)
+  # Enruta puerto 5000 al Primario con failover automático a la Réplica.
+  # ============================================================================
+  db_balancer:
+    image: haproxy:2.8-alpine
+    ports:
+      - target: 7000
+        published: 7000
+        mode: ingress
+    configs:
+      - source: db_haproxy_cfg_v1
+        target: /usr/local/etc/haproxy/haproxy.cfg
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ============================================================================
+  # CAPA 4: POSTGRESQL + POSTGIS PRIMARIO (DB MASTER)
+  # ============================================================================
+  db_primary:
+    image: postgis/postgis:16-3.4-alpine
+    environment:
+      POSTGRES_DB: cementerio_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - target: 5432
+        published: 5432
+        mode: ingress
+    volumes:
+      - pgdata_primary:/var/lib/postgresql/data
+    configs:
+      - source: db_init_sql_v1
+        target: /docker-entrypoint-initdb.d/01-init-postgis.sql
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ============================================================================
+  # CAPA 4: POSTGRESQL + POSTGIS RÉPLICA (DB STANDBY)
+  # ============================================================================
+  db_replica:
+    image: postgis/postgis:16-3.4-alpine
+    environment:
+      POSTGRES_DB: cementerio_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - target: 5432
+        published: 5433
+        mode: ingress
+    volumes:
+      - pgdata_replica:/var/lib/postgresql/data
+    configs:
+      - source: db_init_sql_v1
+        target: /docker-entrypoint-initdb.d/01-init-postgis.sql
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ============================================================================
+  # CAPA 5: SERVIDOR DE RESPALDO AUTOMATIZADO
+  # ============================================================================
+  backup_server:
+    image: cementerio-backup:latest
+    environment:
+      DB_HOST: db_primary
+      DB_PORT: "5432"
+      DB_NAME: cementerio_db
+      DB_USER: postgres
+      PGPASSWORD: postgres123
+      BACKUP_INTERVAL_MINUTES: "60"
+    volumes:
+      - backups_storage:/backups
+    networks:
+      - cementerio_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+

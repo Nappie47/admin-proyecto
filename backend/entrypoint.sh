@@ -13,7 +13,7 @@ database_url = os.getenv("DATABASE_URL")
 if not database_url:
     user = os.getenv("DB_USER", "postgres")
     password = os.getenv("DB_PASSWORD", "postgres123")
-    host = os.getenv("DB_HOST", "vm-4-haproxy-db")
+    host = os.getenv("DB_HOST", "vm4_haproxy_db")
     port = os.getenv("DB_PORT", "5000")
     dbname = os.getenv("DB_NAME", "cementerio_db")
     database_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
