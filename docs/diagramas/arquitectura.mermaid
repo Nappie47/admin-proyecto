@@ -1,0 +1,96 @@
+# Diagramas de Arquitectura y Flujos - Unidad 2
+## Sistema de Información Geográfica - Cementerio General de Los Ángeles
+
+### 1. Diagrama de Arquitectura de Contenedores y Redes
+
+```mermaid
+flowchart TD
+    subgraph Internet["Red Externa / Clientes"]
+        User["Ciudadano / Funcionario Municipal"]
+    end
+
+    subgraph Host["Host Docker (Servidor Linux)"]
+        subgraph NetFrontend["Red: sig_frontend_network"]
+            Gateway["sig_gateway\n(Nginx Unprivileged 1.27)\nPuerto: 80 / 8080"]
+            Frontend["sig_frontend\n(React 18 + Vite + Leaflet)\nPuerto: 8080"]
+        end
+
+        subgraph NetBackend["Red: sig_backend_network"]
+            Backend["sig_backend\n(Flask + Gunicorn 3 workers)\nPuerto: 5000"]
+        end
+
+        subgraph NetDB["Red: sig_db_network (INTERNAL)"]
+            Database[("sig_database\n(PostGIS 3.4 / Postgres 16)\nPuerto: 5432")]
+            VolDB[("Volumen Nombrado:\nsig_db_postgres_data")]
+        end
+
+        subgraph NetMon["Red: sig_monitoring_network"]
+            Prometheus["sig_prometheus\n(Prometheus v2.54.1)\nPuerto: 9090"]
+            Grafana["sig_grafana\n(Grafana v11.2.0)\nPuerto: 3000"]
+            VolProm[("Volumen Nombrado:\nsig_prometheus_data")]
+            VolGraf[("Volumen Nombrado:\nsig_grafana_data")]
+        end
+    end
+
+    User -->|"HTTP GET/POST :80"| Gateway
+    Gateway -->|"Proxy: /"| Frontend
+    Gateway -->|"Proxy: /api/"| Backend
+    Backend -->|"SQL / PostGIS TCP 5432"| Database
+    Database --- VolDB
+
+    Prometheus -->|"Scrape /nginx_status"| Gateway
+    Prometheus -->|"Scrape /api/health"| Backend
+    Grafana -->|"Consulta Métricas :9090"| Prometheus
+    Prometheus --- VolProm
+    Grafana --- VolGraf
+```
+
+---
+
+### 2. Diagrama de Secuencia: Flujo de Consulta Cartográfica y Búsqueda
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Usuario as Ciudadano / Usuario
+    participant GW as sig_gateway (Nginx)
+    participant FE as sig_frontend (React)
+    participant BE as sig_backend (Flask API)
+    participant DB as sig_database (PostGIS)
+
+    Usuario->>GW: GET / (Acceso a la plataforma)
+    GW->>FE: Enruta solicitud a Nginx Frontend
+    FE-->>Usuario: Retorna HTML5 / Bundle React + Leaflet
+
+    Usuario->>GW: GET /api/sepulturas?search=Pérez
+    GW->>BE: Proxy inverso hacia puerto 5000
+    BE->>BE: Valida parámetros y headers
+    BE->>DB: SELECT * FROM sepulturas WHERE apellido ILIKE '%Pérez%'
+    DB-->>BE: Retorna registros + coordenadas (Lat, Lon)
+    BE-->>GW: Respuesta JSON con datos y GeoJSON
+    GW-->>Usuario: Respuesta 200 OK con resultados
+
+    Usuario->>FE: Interactúa con el mapa interactivo
+    FE-->>Usuario: Centra mapa en Patio 2, Fila 4, Sepultura 104
+```
+
+---
+
+### 3. Diagrama de Secuencia: Ciclo de Respaldo y Restauración
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operador as Administrador / Cron
+    participant Script as scripts/backup/backup.sh
+    participant DB as sig_database (Contenedor)
+    participant Storage as Almacenamiento Local (backups/)
+
+    Operador->>Script: Ejecuta ./scripts/backup/backup.sh
+    Script->>DB: docker exec pg_dump -U postgres cementerio_db
+    DB-->>Script: Flujo binario SQL con esquema y datos
+    Script->>Script: Comprime con gzip (cementerio_db_TIMESTAMP.sql.gz)
+    Script->>Storage: Guarda archivo y verifica integridad
+    Script->>Storage: Limpia respaldos antiguos (> 7 días)
+    Script-->>Operador: Reporte de éxito con tamaño y ruta
+```

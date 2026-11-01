@@ -13,12 +13,12 @@ database_url = os.getenv("DATABASE_URL")
 if not database_url:
     user = os.getenv("DB_USER", "postgres")
     password = os.getenv("DB_PASSWORD", "postgres123")
-    host = os.getenv("DB_HOST", "vm-4-haproxy-db")
-    port = os.getenv("DB_PORT", "5000")
+    host = os.getenv("DB_HOST", "database")
+    port = os.getenv("DB_PORT", "5432")
     dbname = os.getenv("DB_NAME", "cementerio_db")
     database_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
 
-max_retries = 30
+max_retries = 35
 retry_interval = 2
 
 for attempt in range(1, max_retries + 1):
@@ -39,4 +39,4 @@ echo "[INFO] Ejecutando poblamiento inicial de tablas y datos (seed)..."
 python -m seeds.seed_data || echo "[WARN] Seed ya poblado o no requerido."
 
 echo "[INFO] Iniciando servidor Gunicorn WSGI en puerto 5000..."
-exec gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 "app:create_app()"
+exec gunicorn --bind 0.0.0.0:5000 --workers 3 --timeout 120 "app:create_app()"
