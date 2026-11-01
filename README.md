@@ -88,3 +88,14 @@ docker compose ps
 # Restaurar copia y verificar integridad:
 ./scripts/restore/restore.sh
 ```
+
+---
+
+## 6. Documentación Detallada y Guías
+
+- **Guía de Ejecución y Pruebas Paso a Paso:** [`docs/guia-ejecucion-pruebas.md`](docs/guia-ejecucion-pruebas.md)
+- **Documento de Arquitectura de Contenedores:** [`docs/arquitectura.md`](docs/arquitectura.md)
+- **Registro de Infraestructura de la Unidad 1:** [`docs/infraestructura-u1.md`](docs/infraestructura-u1.md)
+- **Análisis Económico y Presupuesto:** [`docs/presupuesto.md`](docs/presupuesto.md)
+- **Bases de la Licitación Mercado Público:** [`docs/licitacion/licitacion-2411-8-LE25.md`](docs/licitacion/licitacion-2411-8-LE25.md)
+- **Diagramas de Arquitectura (Mermaid):** [`docs/diagramas/arquitectura.mermaid`](docs/diagramas/arquitectura.mermaid)
