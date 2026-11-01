@@ -1,5 +1,5 @@
 # ==============================================================================
-# PROYECTO INTEGRADOR - UNIDAD 2: ARQUITECTURA BASADA EN CONTENEDORES
+# PROYECTO INTEGRADOR - UNIDAD 2: ARQUITECTURA BASADA EN CONTENEDORES CON ALTA DISPONIBILIDAD
 # Plataforma Web y SIG - Cementerio General Comuna de Los Ángeles
 # Licitación Mercado Público: 2411-8-LE25
 # Integrantes: Bryan Ahumada - Johan Muñoz
@@ -16,15 +16,17 @@ networks:
     name: sig_backend_network
   db_net:
     driver: bridge
-    internal: true # Seguridad: Red interna aislada de internet
+    internal: true # Seguridad: Red interna aislada sin acceso a internet
     name: sig_db_network
   monitoring_net:
     driver: bridge
     name: sig_monitoring_network
 
 volumes:
-  db_data:
-    name: sig_db_postgres_data
+  pgdata_primary:
+    name: sig_pgdata_primary_volume
+  pgdata_replica:
+    name: sig_pgdata_replica_volume
   prometheus_data:
     name: sig_prometheus_data
   grafana_data:
@@ -32,7 +34,7 @@ volumes:
 
 services:
   # ============================================================================
-  # CAPA 1: INGRESS / API GATEWAY (Punto de Entrada Único)
+  # CAPA 1: INGRESS / API GATEWAY (HAProxy L7 - Equivalente a VM-1)
   # ============================================================================
   gateway:
     build:
@@ -41,36 +43,37 @@ services:
     container_name: sig_gateway
     restart: unless-stopped
     ports:
-      - "${GATEWAY_PORT:-80}:8080"
+      - "${GATEWAY_PORT:-80}:80"
+      - "8404:8404"    # Dashboard de Estadísticas HAProxy Web
     networks:
       - frontend_net
       - backend_net
       - monitoring_net
     depends_on:
-      frontend:
+      frontend_1:
         condition: service_healthy
-      backend:
+      backend_1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/gateway-health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8404/"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 5s
 
   # ============================================================================
-  # CAPA 2: FRONTEND SPA (React 18 + Vite + Leaflet)
+  # CAPA 2: SERVIDOR WEB FRONTEND 1 (React 18 + Vite - Equivalente a VM-2 Web)
   # ============================================================================
-  frontend:
+  frontend_1:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
-    container_name: sig_frontend
+    container_name: sig_frontend_1
     restart: unless-stopped
     networks:
       - frontend_net
     depends_on:
-      backend:
+      backend_1:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
@@ -80,30 +83,51 @@ services:
       start_period: 5s
 
   # ============================================================================
-  # CAPA 3: BACKEND CORE API (Flask RESTful + PostGIS + Gunicorn)
+  # CAPA 2: SERVIDOR WEB FRONTEND 2 - RÉPLICA (Equivalente a VM-3 Web)
   # ============================================================================
-  backend:
+  frontend_2:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: sig_frontend_2
+    restart: unless-stopped
+    networks:
+      - frontend_net
+    depends_on:
+      backend_1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ============================================================================
+  # CAPA 2: SERVIDOR API BACKEND 1 (Flask + PostGIS - Equivalente a VM-2 App)
+  # ============================================================================
+  backend_1:
     build:
       context: ./services/backend
       dockerfile: Dockerfile
-    container_name: sig_backend
+    container_name: sig_backend_1
     restart: unless-stopped
     environment:
       - APP_ENV=${APP_ENV:-production}
       - SECRET_KEY=${SECRET_KEY:-cementerio-los-angeles-secret-key-2026}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-cementerio-jwt-super-secret-key-2026}
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_secure_password_2026}@database:5432/${DB_NAME:-cementerio_db}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_secure_password_2026}@haproxy_db:5000/${DB_NAME:-cementerio_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres_secure_password_2026}
-      - DB_HOST=database
-      - DB_PORT=5432
+      - DB_HOST=haproxy_db
+      - DB_PORT=5000
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
     networks:
       - backend_net
       - db_net
     depends_on:
-      database:
+      haproxy_db:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]
@@ -113,11 +137,68 @@ services:
       start_period: 25s
 
   # ============================================================================
-  # CAPA 4: BASE DE DATOS ESPACIAL (PostgreSQL 16 + PostGIS 3.4)
+  # CAPA 2: SERVIDOR API BACKEND 2 - RÉPLICA (Flask + PostGIS - Equivalente a VM-3 App)
   # ============================================================================
-  database:
+  backend_2:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    container_name: sig_backend_2
+    restart: unless-stopped
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - SECRET_KEY=${SECRET_KEY:-cementerio-los-angeles-secret-key-2026}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-cementerio-jwt-super-secret-key-2026}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_secure_password_2026}@haproxy_db:5000/${DB_NAME:-cementerio_db}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres_secure_password_2026}
+      - DB_HOST=haproxy_db
+      - DB_PORT=5000
+      - DB_NAME=${DB_NAME:-cementerio_db}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
+    networks:
+      - backend_net
+      - db_net
+    depends_on:
+      haproxy_db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  # ============================================================================
+  # CAPA 3: BALANCEADOR DE BASE DE DATOS (HAProxy TCP L4 - Equivalente a VM-4)
+  # ============================================================================
+  haproxy_db:
+    image: haproxy:2.8-alpine
+    container_name: sig_haproxy_db
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/proxy/haproxy-db.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "7000:7000"    # Dashboard de Estadísticas HAProxy DB
+    networks:
+      - db_net
+      - monitoring_net
+    depends_on:
+      db_primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:7000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ============================================================================
+  # CAPA 4: BASE DE DATOS PRIMARIA (PostgreSQL 16 + PostGIS 3.4 - Equivalente a VM-5)
+  # ============================================================================
+  db_primary:
     image: postgis/postgis:16-3.4-alpine
-    container_name: sig_database
+    container_name: sig_db_primary
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-cementerio_db}
@@ -125,7 +206,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_secure_password_2026}
       TZ: America/Santiago
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - pgdata_primary:/var/lib/postgresql/data
       - ./infrastructure/database/init:/docker-entrypoint-initdb.d:ro
     networks:
       - db_net
@@ -137,7 +218,31 @@ services:
       start_period: 10s
 
   # ============================================================================
-  # CAPA 5: MONITOREO Y MÉTRICAS (Prometheus)
+  # CAPA 4: BASE DE DATOS RÉPLICA (PostgreSQL 16 + PostGIS 3.4 - Equivalente a VM-6)
+  # ============================================================================
+  db_replica:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: sig_db_replica
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cementerio_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_secure_password_2026}
+      TZ: America/Santiago
+    volumes:
+      - pgdata_replica:/var/lib/postgresql/data
+      - ./infrastructure/database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - db_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-cementerio_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================================================
+  # CAPA 5: MONITOREO Y TELEMETRÍA (Prometheus v2.54.1)
   # ============================================================================
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -159,7 +264,7 @@ services:
       start_period: 10s
 
   # ============================================================================
-  # CAPA 5: DASHBOARDS Y OBSERVABILIDAD (Grafana)
+  # CAPA 5: DASHBOARDS Y OBSERVABILIDAD (Grafana v11.2.0)
   # ============================================================================
   grafana:
     image: grafana/grafana:11.2.0

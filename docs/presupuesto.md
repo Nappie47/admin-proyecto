@@ -100,3 +100,4 @@ Para la futura incorporación del microservicio de Inteligencia Artificial (`ser
 | **3. Operación y Mantención Anual (OPEX)** | $4.800.000 | $5.053 | 30.3 % |
 | **4. Integración y Cómputo Componente IA** | $490.000 | $516 | 3.1 % |
 | **TOTAL PROPUESTA INTEGRAL (AÑO 1)** | **$15.826.240 CLP** | **$16.656 USD** | **100 %** |
+

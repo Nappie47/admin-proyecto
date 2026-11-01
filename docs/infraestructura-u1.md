@@ -77,3 +77,4 @@ La arquitectura de red de la Unidad 1 se distribuyó en 3 redes privadas virtual
 
 ### C. Archivos de Configuración Preservados
 Todas las configuraciones originales (`setup.sh`, archivos `.service` de systemd, `haproxy.cfg`, `config.yml` de Patroni) han sido archivadas en la carpeta `infrastructure/vm-notes/` del repositorio, manteniendo la trazabilidad histórica exigida por la asignatura.
+

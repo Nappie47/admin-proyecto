@@ -1,22 +1,32 @@
 # ==============================================================================
-# Prometheus Configuration - SIG Cementerio General Los Ángeles
+# Prometheus Configuration - SIG Cementerio General Los Ángeles (Unidad 2 HA)
 # ==============================================================================
 
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 10s
+  evaluation_interval: 10s
 
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: "gateway"
-    metrics_path: "/nginx_status"
+  - job_name: "gateway_web"
+    metrics_path: "/"
     static_configs:
-      - targets: ["gateway:8080"]
+      - targets: ["gateway:8404"]
 
-  - job_name: "backend"
+  - job_name: "backend_1"
     metrics_path: "/api/health"
     static_configs:
-      - targets: ["backend:5000"]
+      - targets: ["backend_1:5000"]
+
+  - job_name: "backend_2"
+    metrics_path: "/api/health"
+    static_configs:
+      - targets: ["backend_2:5000"]
+
+  - job_name: "haproxy_db"
+    metrics_path: "/"
+    static_configs:
+      - targets: ["haproxy_db:7000"]

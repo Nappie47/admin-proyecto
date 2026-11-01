@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Script de Restauración de Base de Datos PostgreSQL + PostGIS
+# Script de Restauración de Base de Datos PostgreSQL + PostGIS (HA)
 # Proyecto: SIG Cementerio General de Los Ángeles (Unidad 2)
 # ==============================================================================
 set -euo pipefail
@@ -15,20 +15,18 @@ fi
 
 DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-cementerio_db}"
-CONTAINER_NAME="sig_database"
+CONTAINER_NAME="sig_db_primary"
 
 echo "================================================================="
 echo " [SIG CEMENTERIO] Procedimiento de Restauración (Restore)"
-echo " Base de datos destino: ${DB_NAME}"
+echo " Base de datos destino: ${DB_NAME} (${CONTAINER_NAME})"
 echo "================================================================="
 
-# Validar que el contenedor de base de datos esté corriendo
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "[ERROR] El contenedor '${CONTAINER_NAME}' no está en ejecución."
     exit 1
 fi
 
-# Determinar archivo de respaldo a restaurar
 BACKUP_FILE="${1:-}"
 
 if [ -z "${BACKUP_FILE}" ]; then
@@ -46,7 +44,7 @@ if [ ! -f "${BACKUP_FILE}" ]; then
     exit 1
 fi
 
-echo "[ADVERTENCIA] Se va a sobreescribir la base de datos '${DB_NAME}' con el archivo:"
+echo "[ADVERTENCIA] Se va a sobreescribir la base de datos '${DB_NAME}' con:"
 echo "              ${BACKUP_FILE}"
 read -r -p "¿Deseas continuar con la restauración? [s/N]: " CONFIRMATION
 
@@ -55,10 +53,10 @@ if [[ ! "${CONFIRMATION}" =~ ^[sS]$ ]]; then
     exit 0
 fi
 
-echo "[1/3] Descomprimiendo y restaurando datos en el contenedor..."
+echo "[1/3] Descomprimiendo y restaurando en ${CONTAINER_NAME}..."
 gunzip -c "${BACKUP_FILE}" | docker exec -i "${CONTAINER_NAME}" psql -U "${DB_USER}" -d "${DB_NAME}" > /dev/null
 
-echo "[2/3] Verificando integridad de tablas principales..."
+echo "[2/3] Verificando integridad de tablas principales en el clúster..."
 docker exec -i "${CONTAINER_NAME}" psql -U "${DB_USER}" -d "${DB_NAME}" -c \
   "SELECT 'Patios' AS tabla, count(*) AS registros FROM patios
    UNION ALL

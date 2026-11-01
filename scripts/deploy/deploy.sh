@@ -53,3 +53,4 @@ echo "   - Métricas Prometheus:               http://localhost:9090"
 echo "   - Dashboards Grafana:                http://localhost:3000"
 echo "     (Usuario: admin / Clave: ver archivo .env)"
 echo "================================================================="
+

@@ -1,4 +1,4 @@
-# Arquitectura de Contenedores y Microservicios - Unidad 2
+# Arquitectura de Contenedores con Alta Disponibilidad - Unidad 2
 ## Sistema de Información Geográfica - Cementerio General de Los Ángeles
 **Autores:** Bryan Ahumada - Johan Muñoz  
 **Asignatura:** Administración de Redes y Sistemas Computacionales  
@@ -6,103 +6,69 @@
 
 ---
 
-## 1. Evolución Técnica desde la Unidad 1
+## 1. Evolución Técnica y Correspondencia con la Unidad 1
 
-La Unidad 2 representa una **evolución tecnológica directa** respecto a la infraestructura bare-metal/VM de la Unidad 1. Se migra desde un esquema de 6 máquinas virtuales operadas manualmente con `systemd` hacia una **arquitectura basada en microservicios contenerizados con Docker y orquestados con Docker Compose**.
+En la Unidad 2, la arquitectura mantiene una correspondencia directa 1:1 con la topología de servicios implementada sobre 6 máquinas virtuales en la Unidad 1, evolucionándola hacia un ecosistema de **microservicios contenerizados y orquestados mediante Docker Compose**.
 
-Esta evolución aporta los siguientes beneficios técnicos:
-1. **Reproducibilidad y Despliegue en un Solo Comando:** Eliminación de dependencias del sistema operativo host; todo el clúster arranca con `docker compose up -d`.
-2. **Aislamiento y Seguridad:** Principio de mínimo privilegio con usuarios no root (`USER appuser`, `USER 101`), red de base de datos aislada (`internal: true`) y ausencia de credenciales en el repositorio.
-3. **Observabilidad Integrada:** Stack de monitoreo compuesto por Prometheus y dashboards aprovisionados automáticamente en Grafana.
-4. **Desacoplamiento Funcional:** Separación estricta entre capa de presentación (Frontend SPA), puerta de enlace (API Gateway), lógica de negocio (Backend Core API) y persistencia espacial.
-
----
-
-## 2. Diagrama de Arquitectura de Contenedores
+### Tabla de Correspondencia Arquitectónica
 
 ```
-                          [ CIUDADANOS / FUNCIONARIOS ]
-                                       │
-                                       ▼ (Puerto 80 HTTP)
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       CAPA 1: INGRESS / API GATEWAY                         │
-│ Servicio: gateway (Nginx Unprivileged 1.27-alpine - Puerto Host: 80)        │
-│ • /             ──► Enrutamiento hacia Frontend                             │
-│ • /api/         ──► Enrutamiento hacia Backend Core                         │
-│ • /gateway-health ──► Healthcheck propio                                    │
-│ • /nginx_status ──► Métricas para Prometheus                                │
-└──────────────────────┬───────────────────────────────┬──────────────────────┘
-                       │ (Red: frontend_net)           │ (Red: backend_net)
-                       ▼                               ▼
-┌───────────────────────────────┐     ┌───────────────────────────────────────┐
-│     CAPA 2: FRONTEND SPA      │     │      CAPA 3: BACKEND CORE API         │
-│ Servicio: frontend            │     │ Servicio: backend                     │
-│ (React 18 + Leaflet + Vite)   │     │ (Python 3.11-slim + Flask + Gunicorn) │
-│ • Servido por Nginx no-root   │     │ • Autenticación JWT y Roles           │
-│ • Mapas satelitales y capas   │     │ • Catastro de Sepulturas y Patios     │
-│ • Puerto interno: 8080        │     │ • Catastro de 40 Mausoleos Históricos │
-│ • Healthcheck: /health        │     │ • Healthcheck: /api/health            │
-└───────────────────────────────┘     └───────────────────┬───────────────────┘
-                                                          │ (Red: db_net - Internal)
-                                                          ▼
-                                      ┌───────────────────────────────────────┐
-                                      │      CAPA 4: PERSISTENCIA ESPACIAL    │
-                                      │ Servicio: database                    │
-                                      │ (PostGIS 3.4 sobre PostgreSQL 16)     │
-                                      │ • Extensiones postgis, topology       │
-                                      │ • Volumen persistente: db_data        │
-                                      │ • Red interna sin exposición pública  │
-                                      │ • Healthcheck: pg_isready             │
-                                      └───────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   CAPA 5: OBSERVABILIDAD Y MONITOREO                        │
-│                                                                             │
-│ ┌───────────────────────────────┐         ┌───────────────────────────────┐ │
-│ │    Servicio: prometheus       │         │      Servicio: grafana        │ │
-│ │    (v2.54.1 - Puerto 9090)    │◄────────┤    (v11.2.0 - Puerto 3000)    │ │
-│ │    • Scrape de Gateway        │         │    • Dashboards automáticos   │ │
-│ │    • Scrape de Backend Health │         │    • Estado UP/DOWN servicios │ │
-│ └───────────────────────────────┘         └───────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                   UNIDAD 1 (6 VMs GCP)                 │
+├────────────────────────────────────────────────────────┤
+│ • VM-1: vm-web-haproxy (Balanceador Web L7)            │
+│ • VM-2: vm-app-1 (Nginx + React + Flask Gunicorn)      │
+│ • VM-3: vm-app-2 (Réplica Nginx + React + Flask)       │
+│ • VM-4: vm-db-haproxy (Balanceador DB L4 TCP)          │
+│ • VM-5: vm-db-master (PostgreSQL + PostGIS Primaria)   │
+│ • VM-6: vm-db-replica (PostgreSQL + PostGIS Standby)   │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Evolución a Contenedores
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│              UNIDAD 2 (Docker Compose Stack)           │
+├────────────────────────────────────────────────────────┤
+│ • sig_gateway     (HAProxy 2.8 L7 Ingress :80 / :8404) │
+│ • sig_frontend_1  (React 18 SPA servida en Nginx)      │
+│ • sig_frontend_2  (React 18 SPA Réplica)               │
+│ • sig_backend_1   (Flask API Gunicorn 3 workers)       │
+│ • sig_backend_2   (Flask API Gunicorn Réplica)         │
+│ • sig_haproxy_db  (HAProxy 2.8 TCP L4 :5000 / :5001)   │
+│ • sig_db_primary  (PostGIS 3.4 / Postgres 16 Primaria) │
+│ • sig_db_replica  (PostGIS 3.4 / Postgres 16 Standby)  │
+│ • sig_prometheus  (Scrape de Métricas :9090)           │
+│ • sig_grafana     (Dashboards de Observabilidad :3000) │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Descomposición de Componentes de Aplicación
+## 2. Descripción de Capas y Resiliencia
 
-Para dar estricto cumplimiento al **Requisito 4.5 (Microservicios)** de la pauta:
-1. **Frontend (`services/frontend`)**: Aplicación web SPA en React 18, empaquetada mediante una construcción multi-stage (`node:20-alpine3.20` -> `nginxinc/nginx-unprivileged:1.27-alpine`). Corre bajo usuario sin privilegios (UID 101).
-2. **Backend Core (`services/backend`)**: API REST construida con Flask y SQLAlchemy. Ejecutada mediante Gunicorn WSGI con 3 workers, utilizando usuario de sistema `appuser` (UID 10001). Expone salud operativa en `/api/health`.
-3. **API Gateway (`services/gateway`)**: Punto unificado de entrada L7 que centraliza las conexiones del navegador y las bifurca según la URI solicitada, protegiendo a los servicios internos de la exposición directa.
-4. **Módulo de Inteligencia Artificial (`services/ai-service`)**: La arquitectura y el Gateway han sido diseñados con desacoplamiento total, de modo que la integración del microservicio de IA (a definir con el equipo) se conectará de manera inmediata bajo la ruta `/api/ai/` en la red `backend_net`.
+### Capa 1: Ingress / Gateway L7 (`sig_gateway`)
+- **Tecnología:** `haproxy:2.8-alpine`.
+- **Puerto:** `80` (Tráfico público) y `8404` (Dashboard de estadísticas).
+- **Mecanismo:** Analiza la URI solicitada:
+  - Si coincide con el prefijo `/api/`, enruta hacia el clúster de API REST (`backend_1` y `backend_2`).
+  - Para cualquier otra ruta, enruta hacia el clúster de interfaz web (`frontend_1` y `frontend_2`).
+- **Resiliencia:** Verifica activamente el estado de los servidores (`GET /health` y `GET /api/health`). Si un nodo falla 3 veces consecutivas, es extraído del balanceo en menos de 9 segundos y el tráfico se mantiene en el nodo sano.
 
----
+### Capa 2: Microservicios de Aplicación Replicados
+- **Frontend Replicado (`frontend_1` y `frontend_2`):** Construidos mediante multi-stage build (`node:20-alpine` -> `nginx-unprivileged:1.27-alpine`). Corren bajo usuario sin privilegios `nginx` (UID 101).
+- **Backend Replicado (`backend_1` y `backend_2`):** API REST en Python 3.11-slim servida por Gunicorn con 3 workers concurrentes. Corren bajo usuario seguro `appuser` (UID 10001). Ambas instancias se conectan a la base de datos a través del balanceador TCP interno `haproxy_db:5000`.
 
-## 4. Segmentación de Redes en Docker (Custom Networks)
+### Capa 3: Balanceo de Base de Datos L4 (`sig_haproxy_db`)
+- **Tecnología:** `haproxy:2.8-alpine` en modo TCP.
+- **Puertos:**
+  - `5000`: Escritura y transacciones. Monitorea el estado de PostgreSQL (`option pgsql-check user postgres`). Apunta a `db_primary` y conmuta automáticamente a `db_replica` como fallback en caso de fallo del primario.
+  - `5001`: Lectura distribuida en Round-Robin entre ambas instancias.
+  - `7000`: Dashboard web de estadísticas y métricas de conexiones TCP.
 
-La solución utiliza el driver `bridge` para crear 4 redes lógicas independientes:
+### Capa 4: Persistencia y Base de Datos Espacial
+- **Nodos:** `db_primary` y `db_replica` ejecutando `postgis/postgis:16-3.4-alpine`.
+- **Persistencia Desacoplada:** Los datos residen en volúmenes nombrados independientes (`sig_pgdata_primary_volume` y `sig_pgdata_replica_volume`), garantizando la preservación de la información espacial ante cualquier reinicio o recreación de contenedores.
+- **Aislamiento de Red:** Ubicadas en la red `sig_db_network` configurada con `internal: true`, lo que impide el acceso no autorizado desde el host o internet.
 
-| Red Docker | Propósito | Servicios Conectados | Aislamiento |
-| :--- | :--- | :--- | :--- |
-| `frontend_net` | Comunicación entre Gateway y servidor web estático. | `gateway`, `frontend` | Solo tráfico HTTP interno. |
-| `backend_net` | Comunicación entre Gateway, Backend API y futuras extensiones. | `gateway`, `backend`, `prometheus` | Aísla la API REST. |
-| `db_net` | Conexión transaccional y consultas espaciales a la base de datos. | `backend`, `database` | **`internal: true`**: La base de datos es totalmente inaccesible desde el host o internet. |
-| `monitoring_net` | Canal de telemetría y métricas operativas. | `gateway`, `prometheus`, `grafana` | Tráfico de diagnóstico y observabilidad. |
-
----
-
-## 5. Persistencia y Gestión de Volúmenes
-
-Todos los datos críticos están desacoplados del ciclo de vida de los contenedores mediante **volúmenes nombrados**:
-- **`db_data`**: Almacena el directorio `/var/lib/postgresql/data` de PostgreSQL/PostGIS. Si el contenedor se destruye o actualiza, la información catastral permanece intacta.
-- **`prometheus_data`**: Persistencia de métricas y series temporales recolectadas.
-- **`grafana_data`**: Almacenamiento de preferencias, sesiones y configuraciones de dashboards.
-
----
-
-## 6. Políticas de Resiliencia y Health Checks
-
-- **Orden de Arranque Seguro (`depends_on`):** Ningún servicio inicia hasta que su dependencia haya completado su ciclo de inicialización (`condition: service_healthy`). El Backend espera que PostGIS responda positivamente a `pg_isready`, y el Gateway espera que Frontend y Backend estén saludables.
-- **Auto-recuperación (`restart: unless-stopped`):** Si un proceso falla, el daemon de Docker lo reinicia automáticamente.
-- **Sondas de Salud Periódicas (`HEALTHCHECK`):** Cada contenedor cuenta con sondas nativas cada 15 a 30 segundos para evaluar su estado real.
+### Capa 5: Observabilidad y Monitoreo
+- **Prometheus (v2.54.1):** Recolecta métricas cada 10 segundos de los dos balanceadores (Web y DB) y de los dos backends.
+- **Grafana (v11.2.0):** Dashboard preconfigurado con visualización en vivo de la disponibilidad (estado `UP` o `DOWN`) y tiempos de respuesta.

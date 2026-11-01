@@ -54,3 +54,4 @@ Históricamente, la administración municipal ha enfrentado graves dificultades 
 - **RNF04 (Persistencia Desacoplada):** Los datos geográficos y tablas residen en volúmenes Docker independientes del ciclo de vida de los contenedores.
 - **RNF05 (Monitoreo Continuo):** Recolección de métricas con Prometheus y visualización de salud en Grafana.
 - **RNF06 (Recuperación ante Desastres):** Procedimientos automatizados de backup diario con compresión gzip y scripts de restauración probados.
+
