@@ -123,6 +123,7 @@ services:
       - DB_PORT=5000
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
+      - RUN_SEED=true
     networks:
       - backend_net
       - db_net
@@ -133,8 +134,8 @@ services:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]
       interval: 15s
       timeout: 5s
-      retries: 3
-      start_period: 25s
+      retries: 5
+      start_period: 40s
 
   # ============================================================================
   # CAPA 2: SERVIDOR API BACKEND 2 - RÉPLICA (Flask + PostGIS - Equivalente a VM-3 App)
@@ -156,6 +157,7 @@ services:
       - DB_PORT=5000
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
+      - RUN_SEED=false
     networks:
       - backend_net
       - db_net
@@ -166,8 +168,8 @@ services:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]
       interval: 15s
       timeout: 5s
-      retries: 3
-      start_period: 25s
+      retries: 5
+      start_period: 40s
 
   # ============================================================================
   # CAPA 3: BALANCEADOR DE BASE DE DATOS (HAProxy TCP L4 - Equivalente a VM-4)
@@ -181,8 +183,10 @@ services:
     ports:
       - "${HAPROXY_DB_STATS_PORT:-7070}:7000"    # Dashboard de Estadísticas HAProxy DB
     networks:
-      - db_net
-      - monitoring_net
+      db_net:
+        aliases:
+          - database
+      monitoring_net:
     depends_on:
       db_primary:
         condition: service_healthy

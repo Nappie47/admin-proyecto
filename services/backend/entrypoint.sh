@@ -12,7 +12,7 @@ import psycopg2
 database_url = os.getenv("DATABASE_URL")
 if not database_url:
     user = os.getenv("DB_USER", "postgres")
-    password = os.getenv("DB_PASSWORD", "postgres123")
+    password = os.getenv("DB_PASSWORD", "postgres_secure_password_2026")
     host = os.getenv("DB_HOST", "haproxy_db")
     port = os.getenv("DB_PORT", "5000")
     dbname = os.getenv("DB_NAME", "cementerio_db")
@@ -35,8 +35,13 @@ print("[ERROR] No se pudo conectar a la base de datos tras múltiples intentos."
 sys.exit(1)
 EOF
 
-echo "[INFO] Ejecutando poblamiento inicial de tablas y datos (seed)..."
-python -m seeds.seed_data || echo "[WARN] Seed ya poblado o no requerido."
+RUN_SEED="${RUN_SEED:-true}"
+if [ "$RUN_SEED" = "true" ]; then
+    echo "[INFO] Ejecutando poblamiento inicial de tablas y datos (seed)..."
+    python -m seeds.seed_data || echo "[WARN] Seed ya poblado o no requerido."
+else
+    echo "[INFO] Omitiendo seed en este nodo secundario."
+fi
 
 echo "[INFO] Iniciando servidor Gunicorn WSGI en puerto 5000..."
 exec gunicorn --bind 0.0.0.0:5000 --workers 3 --timeout 120 "app:create_app()"
