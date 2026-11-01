@@ -34,7 +34,7 @@ El clúster de servicios se compone de **9 contenedores orquestados con Docker C
 | **VM-3 (App 2 Web)** | **`frontend_2`** | `sig_frontend_2` | `node:20-alpine` + `nginx-unprivileged` | *Interno* | Servidor Web Réplica. Tolerancia a fallos en la interfaz. |
 | **VM-2 (App 1 API)** | **`backend_1`** | `sig_backend_1` | `python:3.11-slim` | *Interno* | API REST Primaria (Flask + Gunicorn 3 workers). Usuario `appuser` (UID 10001). |
 | **VM-3 (App 2 API)** | **`backend_2`** | `sig_backend_2` | `python:3.11-slim` | *Interno* | API REST Réplica. Tolerancia a fallos y balanceo activo de peticiones. |
-| **VM-4 (DB HAProxy)** | **`haproxy_db`** | `sig_haproxy_db` | `haproxy:2.8-alpine` | `7000:7000` *(Stats)* | **Balanceador TCP L4 de Base de Datos:** Enruta escrituras al puerto 5000 (Primario) con failover automático a la Réplica. |
+| **VM-4 (DB HAProxy)** | **`haproxy_db`** | `sig_haproxy_db` | `haproxy:2.8-alpine` | `7070:7000` *(Stats)* | **Balanceador TCP L4 de Base de Datos:** Enruta escrituras al puerto 5000 (Primario) con failover automático a la Réplica. |
 | **VM-5 (DB Primaria)**| **`db_primary`** | `sig_db_primary` | `postgis/postgis:16-3.4-alpine` | *Interno* (db_net) | Base de datos geoespacial primaria. Volumen `sig_pgdata_primary_volume`. |
 | **VM-6 (DB Réplica)** | **`db_replica`** | `sig_db_replica` | `postgis/postgis:16-3.4-alpine` | *Interno* (db_net) | Base de datos réplica standby. Volumen `sig_pgdata_replica_volume`. |
 | *(Novedad U2)* | **`prometheus`** | `sig_prometheus` | `prom/prometheus:v2.54.1` | `9090:9090` | Recolección de telemetría y métricas operativas de todos los nodos. |
@@ -62,7 +62,7 @@ docker compose ps
 
 - **Plataforma SIG (Aplicación Web):** [http://localhost](http://localhost) (Puerto 80).
 - **Estadísticas HAProxy Web (Ingress):** [http://localhost:8404](http://localhost:8404) (o [http://localhost/haproxy?stats](http://localhost/haproxy?stats)).
-- **Estadísticas HAProxy Base de Datos:** [http://localhost:7000](http://localhost:7000).
+- **Estadísticas HAProxy Base de Datos:** [http://localhost:7070](http://localhost:7070).
 - **Tablero de Monitoreo Grafana:** [http://localhost:3000](http://localhost:3000) (`admin` / `admin_grafana_2026!`).
 - **Métricas Prometheus:** [http://localhost:9090](http://localhost:9090).
 

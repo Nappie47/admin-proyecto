@@ -17,7 +17,7 @@ La arquitectura cuenta con **9 contenedores** orquestados, cada uno con una resp
 | **3** | **`sig_frontend_2`** | `frontend_2` | `node:20-alpine` + `nginx-unprivileged` | *Interno* (:8080) | `frontend_net` | Ninguno (Stateless) | `wget -q :8080/health` (20s) | **VM-3: vm-app-2** (Web Réplica) |
 | **4** | **`sig_backend_1`** | `backend_1` | `python:3.11-slim` + Gunicorn (3w) | *Interno* (:5000) | `backend_net`<br>`db_net` | Ninguno (Stateless) | `curl -f :5000/api/health` (15s) | **VM-2: vm-app-1** (API Flask) |
 | **5** | **`sig_backend_2`** | `backend_2` | `python:3.11-slim` + Gunicorn (3w) | *Interno* (:5000) | `backend_net`<br>`db_net` | Ninguno (Stateless) | `curl -f :5000/api/health` (15s) | **VM-3: vm-app-2** (API Réplica) |
-| **6** | **`sig_haproxy_db`** | `haproxy_db` | `haproxy:2.8-alpine` (Modo TCP) | `7000:7000` *(Stats)*<br>*Interno :5000 / :5001* | `db_net`<br>`monitoring_net` | `./infrastructure/proxy/haproxy-db.cfg` | `wget -q --spider :7000/` (10s) | **VM-4: vm-db-haproxy** (Enrutador TCP) |
+| **6** | **`sig_haproxy_db`** | `haproxy_db` | `haproxy:2.8-alpine` (Modo TCP) | `7070:7000` *(Stats)*<br>*Interno :5000 / :5001* | `db_net`<br>`monitoring_net` | `./infrastructure/proxy/haproxy-db.cfg` | `wget -q --spider :7000/` (10s) | **VM-4: vm-db-haproxy** (Enrutador TCP) |
 | **7** | **`sig_db_primary`** | `db_primary` | `postgis/postgis:16-3.4-alpine` | *Interno* (:5432) | `db_net` (*internal: true*) | `sig_pgdata_primary_volume`<br>`init/01-init-postgis.sql` | `pg_isready -U postgres` (10s) | **VM-5: vm-db-master** (PostGIS Primario) |
 | **8** | **`sig_db_replica`** | `db_replica` | `postgis/postgis:16-3.4-alpine` | *Interno* (:5432) | `db_net` (*internal: true*) | `sig_pgdata_replica_volume`<br>`init/01-init-postgis.sql` | `pg_isready -U postgres` (10s) | **VM-6: vm-db-replica** (PostGIS Standby) |
 | **9** | **`sig_prometheus`** | `prometheus` | `prom/prometheus:v2.54.1` | `9090:9090` | `monitoring_net`<br>`backend_net` | `sig_prometheus_data`<br>`prometheus.yml` | `wget -q :9090/-/healthy` (20s) | *(Novedad U2)* Recolector de Métricas |
@@ -60,7 +60,7 @@ docker compose ps
 | :--- | :--- | :--- |
 | **Plataforma Web SIG** | [http://localhost](http://localhost) (Puerto 80) | Ciudadano: Acceso libre sin login<br>Admin: `admin@losangeles.cl` / `Admin123!`<br>Funcionario: `funcionario@losangeles.cl` / `Funcionario123!` |
 | **Estadísticas HAProxy Web** | [http://localhost:8404](http://localhost:8404) | Sin credenciales (Acceso directo a métricas L7) |
-| **Estadísticas HAProxy DB** | [http://localhost:7000](http://localhost:7000) | Sin credenciales (Conexiones TCP PostgreSQL) |
+| **Estadísticas HAProxy DB** | [http://localhost:7070](http://localhost:7070) | Sin credenciales (Conexiones TCP PostgreSQL) |
 | **Dashboard Grafana** | [http://localhost:3000](http://localhost:3000) | Usuario: `admin`<br>Clave: `admin_grafana_2026!` |
 | **Métricas Prometheus** | [http://localhost:9090](http://localhost:9090) | Sin credenciales |
 
@@ -119,7 +119,7 @@ Estas pruebas están diseñadas para ejecutarse en vivo frente al evaluador, dem
 ### Prueba 4: Demostración de Failover en la Capa de Datos (HAProxy DB)
 *Objetivo: Demostrar que el balanceador TCP desacopla las aplicaciones del estado de la base de datos.*
 
-1. Abrir el panel de estadísticas de la base de datos: [http://localhost:7000](http://localhost:7000)
+1. Abrir el panel de estadísticas de la base de datos: [http://localhost:7070](http://localhost:7070)
 2. Observarás:
    - `db_primary`: En color verde activo (recibiendo escrituras en puerto 5000).
    - `db_replica`: En color azul (`backup` listo para asumir la carga).
@@ -127,7 +127,7 @@ Estas pruebas están diseñadas para ejecutarse en vivo frente al evaluador, dem
    ```bash
    docker stop sig_db_primary
    ```
-4. En el puerto 7000, `db_replica` asume el tráfico de inmediato.
+4. En el puerto 7070, `db_replica` asume el tráfico de inmediato.
 5. Reactivar:
    ```bash
    docker start sig_db_primary
@@ -195,3 +195,4 @@ docker compose down
 # Destruir todo incluyendo volúmenes (¡ATENCIÓN: BORRA LOS DATOS DE BD!)
 docker compose down -v
 ```
+

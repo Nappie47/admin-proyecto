@@ -179,7 +179,7 @@ services:
     volumes:
       - ./infrastructure/proxy/haproxy-db.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
-      - "7000:7000"    # Dashboard de Estadísticas HAProxy DB
+      - "${HAPROXY_DB_STATS_PORT:-7070}:7000"    # Dashboard de Estadísticas HAProxy DB
     networks:
       - db_net
       - monitoring_net
