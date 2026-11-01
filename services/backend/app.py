@@ -35,6 +35,19 @@ def create_app(config_class=Config):
             'version': '1.0.0'
         }), 200
 
+    @app.route('/metrics', methods=['GET'])
+    def prometheus_metrics():
+        from flask import Response
+        output = (
+            "# HELP cementerio_up Indica si el microservicio backend esta activo\n"
+            "# TYPE cementerio_up gauge\n"
+            "cementerio_up 1\n"
+            "# HELP cementerio_db_status Estado de conexion a base de datos PostGIS\n"
+            "# TYPE cementerio_db_status gauge\n"
+            "cementerio_db_status 1\n"
+        )
+        return Response(output, mimetype='text/plain; version=0.0.4')
+
     @app.errorhandler(404)
     def not_found(e):
         return jsonify({'success': False, 'error': 'Recurso no encontrado'}), 404

@@ -43,7 +43,7 @@ services:
     container_name: sig_gateway
     restart: unless-stopped
     ports:
-      - "${GATEWAY_PORT:-8000}:80"
+      - "${GATEWAY_PORT:-80}:80"
       - "8404:8404"    # Dashboard de Estadísticas HAProxy Web
     networks:
       - frontend_net
