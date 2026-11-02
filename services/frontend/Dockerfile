@@ -15,6 +15,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+# Argumentos de compilación para variables de entorno Vite
+ARG VITE_GOOGLE_MAPS_API_KEY
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
+
 # Copiar código fuente y compilar bundle de producción
 COPY . .
 RUN npm run build
