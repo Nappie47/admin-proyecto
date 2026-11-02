@@ -220,9 +220,10 @@ VALUES ({p['id']}, {p['numero']}, '{nom}', '{desc}', {p['superficie_m2']}, '{p['
         arq = m['arquitecto'].replace("'", "''")
         est = m['estilo_arquitectonico'].replace("'", "''")
         res = m['resena_historica'].replace("'", "''")
+        foto = f"/images/mausoleos/mausoleo_{idx}.jpg"
         sql.append(f"""
-INSERT INTO mausoleos_historicos (id, nombre, familia, ano_construccion, arquitecto, estilo_arquitectonico, resena_historica, patio_id, latitud, longitud, geom_geojson, destacado, created_at)
-VALUES ({idx}, '{nom}', '{fam}', {m['ano_construccion']}, '{arq}', '{est}', '{res}', {m['patio_id']}, {m['latitud']}, {m['longitud']}, '{geom}', {str(m['destacado']).lower()}, NOW());
+INSERT INTO mausoleos_historicos (id, nombre, familia, ano_construccion, arquitecto, estilo_arquitectonico, resena_historica, patio_id, latitud, longitud, geom_geojson, foto_url, destacado, created_at)
+VALUES ({idx}, '{nom}', '{fam}', {m['ano_construccion']}, '{arq}', '{est}', '{res}', {m['patio_id']}, {m['latitud']}, {m['longitud']}, '{geom}', '{foto}', {str(m['destacado']).lower()}, NOW());
 """)
 
     # 4. Insertar Sepulturas (10 por patio = 50 sepulturas distribuidas)
@@ -284,3 +285,4 @@ if __name__ == "__main__":
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(sql_content)
     print(f"[OK] Archivo SQL generado exitosamente en {out_path}")
+
