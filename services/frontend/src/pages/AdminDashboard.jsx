@@ -10,7 +10,14 @@ import { GraveModal } from '../components/GraveModal';
 import { UserModal } from '../components/UserModal';
 
 export const AdminDashboard = ({ initialTab, setActivePage }) => {
-  const { user, isAdmin, isFuncionario } = useAuth();
+  const { user, isAdmin, isFuncionario, loading } = useAuth();
+
+  // Redirigir a inicio si no es funcionario o cierra sesión
+  useEffect(() => {
+    if (!loading && !isFuncionario) {
+      setActivePage({ name: 'home' });
+    }
+  }, [loading, isFuncionario, setActivePage]);
 
   const [activeTab, setActiveTab] = useState('sepulturas'); // 'sepulturas', 'usuarios', 'mausoleos'
   const [stats, setStats] = useState({
@@ -129,19 +136,21 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
   };
 
   useEffect(() => {
+    if (!isFuncionario) return;
     fetchStats();
     fetchPatios();
     fetchSepulturas(1);
     if (isAdmin) fetchUsers();
-  }, [filterPatio, filterTipo, filterEstado]);
+  }, [filterPatio, filterTipo, filterEstado, isFuncionario, isAdmin]);
 
   useEffect(() => {
+    if (!isFuncionario) return;
     if (initialTab && ['sepulturas', 'usuarios', 'patios'].includes(initialTab)) {
       setActiveTab(initialTab);
-      if (initialTab === 'usuarios') fetchUsers();
+      if (initialTab === 'usuarios' && isAdmin) fetchUsers();
       if (initialTab === 'patios') fetchPatios();
     }
-  }, [initialTab]);
+  }, [initialTab, isFuncionario, isAdmin]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -187,6 +196,10 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
       }
     }
   };
+
+  if (!isFuncionario) {
+    return null;
+  }
 
   return (
     <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '2rem 1.5rem' }}>

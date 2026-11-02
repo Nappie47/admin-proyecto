@@ -31,6 +31,14 @@ export const AuthProvider = ({ children }) => {
     verifyUser();
   }, [token]);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, []);
+
   const login = async (usernameOrEmail, password) => {
     try {
       const res = await authService.login({ username: usernameOrEmail, password });

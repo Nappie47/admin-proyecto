@@ -6,6 +6,14 @@ export const Navbar = ({ activePage, setActivePage, openLoginModal }) => {
   const { role, isAuthenticated, logout, isFuncionario } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const handleLogout = () => {
+    logout();
+    if (activePage.name === 'admin') {
+      setActivePage({ name: 'home' });
+    }
+    setSidebarOpen(false);
+  };
+
   return (
     <>
       <header className="navbar">
@@ -46,7 +54,7 @@ export const Navbar = ({ activePage, setActivePage, openLoginModal }) => {
             <span>{role === 'administrador' ? 'Administrador' : (role === 'funcionario' ? 'Funcionario' : 'Público')}</span>
           </div>
           {isAuthenticated ? (
-            <button onClick={logout} className="btn-primary nav-session-button" title="Cerrar sesión">
+            <button onClick={handleLogout} className="btn-primary nav-session-button" title="Cerrar sesión">
               <LogOut size={15} />
               Cerrar sesión
             </button>
