@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, Layers, Landmark, BarChart2, Settings, Plus, Search, 
   RotateCcw, Edit2, Trash2, CheckCircle2, AlertTriangle, ShieldCheck, UserPlus,
-  Map, Database
+  Map, Database, Camera
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { sepulturaService, userService, mausoleoService, patioService } from '../services/api';
@@ -678,6 +678,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
                 <th style={{ padding: '0.75rem 1rem' }}>Usuario</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Correo</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Rol</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Biometría IA</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Estado</th>
                 <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Acciones</th>
               </tr>
@@ -690,6 +691,38 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
                   <td style={{ padding: '0.85rem 1rem', color: '#64748b' }}>{u.email}</td>
                   <td style={{ padding: '0.85rem 1rem' }}>
                     <span className={`role-badge ${u.rol}`}>{u.rol}</span>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem' }}>
+                    {u.has_biometrics ? (
+                      <span style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '0.3rem', 
+                        backgroundColor: '#dcfce7', 
+                        color: '#15803d', 
+                        padding: '2px 8px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.74rem', 
+                        fontWeight: '600' 
+                      }}>
+                        <Camera size={12} />
+                        Enrolado
+                      </span>
+                    ) : (
+                      <span style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '0.3rem', 
+                        backgroundColor: '#f1f5f9', 
+                        color: '#64748b', 
+                        padding: '2px 8px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.74rem', 
+                        fontWeight: '500' 
+                      }}>
+                        Sin enrolar
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '0.85rem 1rem' }}>
                     <span style={{ color: u.activo ? '#166534' : '#991b1b', fontWeight: '600', fontSize: '0.82rem' }}>

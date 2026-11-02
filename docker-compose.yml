@@ -31,6 +31,8 @@ volumes:
     name: sig_prometheus_data
   grafana_data:
     name: sig_grafana_data
+  ai_data:
+    name: sig_ai_data
 
 services:
   # ============================================================================
@@ -53,6 +55,8 @@ services:
       frontend_1:
         condition: service_healthy
       backend_1:
+        condition: service_healthy
+      ai_service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8404/"]
@@ -104,6 +108,30 @@ services:
       start_period: 5s
 
   # ============================================================================
+  # CAPA 2: MICROSERVICIO DE IA Y RECONOCIMIENTO FACIAL (OpenCV + Biometría)
+  # ============================================================================
+  ai_service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    container_name: sig_ai_service
+    restart: unless-stopped
+    environment:
+      - PORT=5001
+      - AI_DATA_DIR=/app/data/faces
+    volumes:
+      - ai_data:/app/data/faces
+    networks:
+      - backend_net
+      - monitoring_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
   # CAPA 2: SERVIDOR API BACKEND 1 (Flask + PostGIS - Equivalente a VM-2 App)
   # ============================================================================
   backend_1:
@@ -123,12 +151,15 @@ services:
       - DB_PORT=5000
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
+      - AI_SERVICE_URL=http://ai_service:5001
       - RUN_SEED=true
     networks:
       - backend_net
       - db_net
     depends_on:
       haproxy_db:
+        condition: service_healthy
+      ai_service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]
@@ -157,12 +188,15 @@ services:
       - DB_PORT=5000
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
+      - AI_SERVICE_URL=http://ai_service:5001
       - RUN_SEED=false
     networks:
       - backend_net
       - db_net
     depends_on:
       haproxy_db:
+        condition: service_healthy
+      ai_service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]

@@ -18,7 +18,14 @@ api.interceptors.request.use((config) => {
 
 export const authService = {
   login: (credentials) => api.post('/auth/login', credentials),
+  facialLogin: (image) => api.post('/auth/facial-login', { image }),
   me: () => api.get('/auth/me'),
+};
+
+export const biometricsService = {
+  register: (userId, image) => api.post(`/users/${userId}/biometrics`, { image }),
+  delete: (userId) => api.delete(`/users/${userId}/biometrics`),
+  getStatus: () => api.get('/users/biometrics-status'),
 };
 
 export const sepulturaService = {

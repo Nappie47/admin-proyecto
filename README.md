@@ -1,5 +1,5 @@
 # Sistema de Información Geográfica (SIG) - Cementerio General de Los Ángeles
-## Proyecto Integrador: Unidad 1 y Unidad 2 (Alta Disponibilidad Completa)
+## Proyecto Integrador: Unidad 1 y Unidad 2 (Alta Disponibilidad y Microservicio de IA)
 **Asignatura:** Administración de Redes y Sistemas Computacionales  
 **Profesor:** Ricardo Pérez (riperez@utalca.cl)  
 **Semestre:** 2026-II — Universidad de Talca (ICC)  
@@ -15,29 +15,30 @@
 
 Este proyecto consiste en el desarrollo, containerización, monitoreo y operación de una plataforma web y **Sistema de Información Geográfica (SIG)** para la gestión catastral del Cementerio General de la Comuna de Los Ángeles (Región del Biobío, Chile).
 
-Permite la administración de registros de inhumaciones y sepulturas, la delimitación cartográfica interactiva de patios sobre mapas satelitales mediante **PostGIS** y el catastro patrimonial de 40 mausoleos emblemáticos fundacionales.
+Permite la administración de registros de inhumaciones y sepulturas, la delimitación cartográfica interactiva de patios sobre mapas satelitales mediante **PostGIS**, el catastro patrimonial de 40 mausoleos emblemáticos fundacionales y la **autenticación biométrica con Inteligencia Artificial (Reconocimiento Facial)** para funcionarios y administradores.
 
 ### Evolución Técnica del Proyecto
 - **Unidad 1:** Implementada de manera nativa sobre un clúster de 6 máquinas virtuales Debian 13 en Google Cloud Platform (GCP) con demonios `systemd`, balanceo HAProxy y alta disponibilidad con Patroni + etcd. (Ver documentación histórica en [`docs/infraestructura-u1.md`](docs/infraestructura-u1.md)).
-- **Unidad 2:** Evolución directa de la infraestructura de la Unidad 1 hacia una **arquitectura basada en microservicios contenerizados con Docker Compose**, replicando la topología de capas con **alta disponibilidad de punta a punta** (HAProxy Ingress L7, Frontend replicado, Backend replicado, HAProxy DB TCP L4, Base de datos primaria y réplica, y stack de observabilidad con Prometheus y Grafana).
+- **Unidad 2:** Evolución directa de la infraestructura de la Unidad 1 hacia una **arquitectura de 11 microservicios contenerizados con Docker Compose**, con **alta disponibilidad de punta a punta** (HAProxy Ingress L7, Frontend replicado, Backend replicado, Microservicio de IA Biométrico, HAProxy DB TCP L4, Base de datos primaria y réplica, y observabilidad con Prometheus y Grafana).
 
 ---
 
 ## 2. Arquitectura de Contenedores y Equivalencia con la Unidad 1
 
-El clúster de servicios se compone de **9 contenedores orquestados con Docker Compose**, manteniendo estricta correspondencia con las 6 VMs de la Unidad 1:
+El clúster de servicios se compone de **11 contenedores orquestados con Docker Compose**:
 
 | Equivalencia U1 | Servicio Compose | Contenedor | Imagen Base | Puerto | Función / Rol |
 | :--- | :--- | :--- | :--- | :---: | :--- |
-| **VM-1 (Web HAProxy)** | **`gateway`** | `sig_gateway` | `haproxy:2.8-alpine` | `80:80` / `8404:8404` | **Ingress Gateway L7:** Punto único de entrada. Enruta `/` hacia el cluster web y `/api/` hacia el cluster API con Round-Robin y failover. |
-| **VM-2 (App 1 Web)** | **`frontend_1`** | `sig_frontend_1` | `node:20-alpine` + `nginx-unprivileged` | *Interno* | Servidor Web Primario (React 18 + Leaflet). Usuario no root (UID 101). |
+| **VM-1 (Web HAProxy)** | **`gateway`** | `sig_gateway` | `haproxy:2.8-alpine` | `8000:80` / `8404:8404` | **Ingress Gateway L7:** Punto de entrada único. Enruta `/` al frontend, `/api/ai/` a la IA y `/api/` al backend con Round-Robin y failover. |
+| **VM-2 (App 1 Web)** | **`frontend_1`** | `sig_frontend_1` | `node:20-alpine` + `nginx-unprivileged` | *Interno* | Servidor Web Primario (React 18 + Leaflet + Webcam IA). Usuario no root (UID 101). |
 | **VM-3 (App 2 Web)** | **`frontend_2`** | `sig_frontend_2` | `node:20-alpine` + `nginx-unprivileged` | *Interno* | Servidor Web Réplica. Tolerancia a fallos en la interfaz. |
 | **VM-2 (App 1 API)** | **`backend_1`** | `sig_backend_1` | `python:3.11-slim` | *Interno* | API REST Primaria (Flask + Gunicorn 3 workers). Usuario `appuser` (UID 10001). |
 | **VM-3 (App 2 API)** | **`backend_2`** | `sig_backend_2` | `python:3.11-slim` | *Interno* | API REST Réplica. Tolerancia a fallos y balanceo activo de peticiones. |
+| *(Innovación IA)* | **`ai_service`** | `sig_ai_service` | `python:3.11-slim` | *Interno* (`5001`) | **Microservicio de IA y Biometría Facial:** Motor OpenCV Haar-Cascade + Descriptores Sobel/Espaciales con correlación Pearson. |
 | **VM-4 (DB HAProxy)** | **`haproxy_db`** | `sig_haproxy_db` | `haproxy:2.8-alpine` | `7070:7000` *(Stats)* | **Balanceador TCP L4 de Base de Datos:** Enruta escrituras al puerto 5000 (Primario) con failover automático a la Réplica. |
 | **VM-5 (DB Primaria)**| **`db_primary`** | `sig_db_primary` | `postgis/postgis:16-3.4-alpine` | *Interno* (db_net) | Base de datos geoespacial primaria. Volumen `sig_pgdata_primary_volume`. |
 | **VM-6 (DB Réplica)** | **`db_replica`** | `sig_db_replica` | `postgis/postgis:16-3.4-alpine` | *Interno* (db_net) | Base de datos réplica standby. Volumen `sig_pgdata_replica_volume`. |
-| *(Novedad U2)* | **`prometheus`** | `sig_prometheus` | `prom/prometheus:v2.54.1` | `9090:9090` | Recolección de telemetría y métricas operativas de todos los nodos. |
+| *(Novedad U2)* | **`prometheus`** | `sig_prometheus` | `prom/prometheus:v2.54.1` | `9090:9090` | Recolección de telemetría y métricas operativas de los 6 targets activos. |
 | *(Novedad U2)* | **`grafana`** | `sig_grafana` | `grafana/grafana:11.2.0` | `3000:3000` | Dashboards preaprovisionados con estado UP/DOWN en tiempo real. |
 
 ---
@@ -45,14 +46,13 @@ El clúster de servicios se compone de **9 contenedores orquestados con Docker C
 ## 3. Despliegue Rápido (Quickstart)
 
 ```bash
-# 1. Crear variables de entorno
+# 1. Configurar variables de entorno
 cp .env.example .env
 
-# 2. Desplegar todo el clúster en un solo comando
-./scripts/deploy/deploy.sh
-# (o mediante docker compose up -d --build)
+# 2. Desplegar todo el clúster con microservicio de IA
+docker compose up -d --build
 
-# 3. Comprobar salud de los 9 contenedores
+# 3. Comprobar salud de los 11 contenedores
 docker compose ps
 ```
 
@@ -60,15 +60,30 @@ docker compose ps
 
 ## 4. Accesos y Paneles de Control
 
-- **Plataforma SIG (Aplicación Web):** [http://localhost](http://localhost) (Puerto 80).
-- **Estadísticas HAProxy Web (Ingress):** [http://localhost:8404](http://localhost:8404) (o [http://localhost/haproxy?stats](http://localhost/haproxy?stats)).
-- **Estadísticas HAProxy Base de Datos:** [http://localhost:7070](http://localhost:7070).
-- **Tablero de Monitoreo Grafana:** [http://localhost:3000](http://localhost:3000) (`admin` / `admin_grafana_2026!`).
-- **Métricas Prometheus:** [http://localhost:9090](http://localhost:9090).
+- **Plataforma SIG (Aplicación Web):** [http://localhost:8000](http://localhost:8000)
+- **Estadísticas HAProxy Web (Ingress):** [http://localhost:8404](http://localhost:8404) (o [http://localhost:8000/haproxy?stats](http://localhost:8000/haproxy?stats))
+- **Estadísticas HAProxy Base de Datos:** [http://localhost:7070](http://localhost:7070)
+- **Tablero de Monitoreo Grafana:** [http://localhost:3000](http://localhost:3000) (`admin` / `admin_grafana_2026!`)
+- **Métricas Prometheus:** [http://localhost:9090](http://localhost:9090)
+- **Métricas Microservicio de IA:** [http://localhost:8000/api/ai/metrics](http://localhost:8000/api/ai/metrics)
 
 ---
 
-## 5. Pruebas de Resiliencia y Respaldos en Vivo
+## 5. Reconocimiento Facial Biométrico con IA
+
+El sistema cuenta con un microservicio desacoplado (`sig_ai_service`) para enrolamiento e inicio de sesión biométrico:
+
+1. **Login Facial Instantáneo:** En la pantalla de login, pestaña **"Biometría Facial IA"**, el usuario activa su cámara o sube una fotografía. El modelo detecta el rostro, computa su matriz espacial y gradientes de 128x128, y si la similitud supera el umbral de seguridad (72%), emite el token JWT autenticado de forma automática.
+2. **Enrolamiento de Administrador y Trabajadores:** En el panel de Administración (pestaña Usuarios), el administrador puede capturar o cargar la fotografía de cualquier funcionario municipal para activar su perfil biométrico.
+3. **Persistencia y Aislamiento:** Las plantillas biométricas residen en el volumen nombrado `sig_ai_data`.
+4. **Verificación Automática:** Ejecuta el test end-to-end con:
+   ```bash
+   docker exec -i -e GATEWAY_URL="http://gateway" sig_ai_service python3 - < scripts/test_facial_auth.py
+   ```
+
+---
+
+## 6. Pruebas de Resiliencia y Respaldos en Vivo
 
 ### A. Demostración de Failover en la Defensa
 1. Abre la aplicación en el navegador y el panel de Grafana (`:3000`).
@@ -91,7 +106,7 @@ docker compose ps
 
 ---
 
-## 6. Documentación Detallada y Guías
+## 7. Documentación Detallada y Guías
 
 - **Guía de Ejecución y Pruebas Paso a Paso:** [`docs/guia-ejecucion-pruebas.md`](docs/guia-ejecucion-pruebas.md)
 - **Documento de Arquitectura de Contenedores:** [`docs/arquitectura.md`](docs/arquitectura.md)

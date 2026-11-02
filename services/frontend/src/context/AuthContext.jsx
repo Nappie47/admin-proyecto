@@ -51,6 +51,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const facialLogin = async (imageBase64) => {
+    try {
+      const res = await authService.facialLogin(imageBase64);
+      if (res.data.success) {
+        const { token: newToken, user: newUser } = res.data;
+        setToken(newToken);
+        setUser(newUser);
+        localStorage.setItem('cementerio_token', newToken);
+        localStorage.setItem('cementerio_user', JSON.stringify(newUser));
+        return {
+          success: true,
+          user: newUser,
+          confidence: res.data.confidence
+        };
+      }
+      return {
+        success: false,
+        error: res.data.error || 'Rostro no reconocido',
+        confidence: res.data.confidence
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err.response?.data?.error || 'Error al verificar biometría facial',
+        confidence: err.response?.data?.confidence
+      };
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -71,6 +100,7 @@ export const AuthProvider = ({ children }) => {
       isFuncionario,
       isAuthenticated: !!token,
       login,
+      facialLogin,
       logout,
       loading
     }}>

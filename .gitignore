@@ -31,6 +31,7 @@ yarn-debug.log*
 backups/
 *.sql.gz
 *.tar.gz
+services/ai-service/data/faces/
 
 # Archivos del Sistema Operativo
 .DS_Store
