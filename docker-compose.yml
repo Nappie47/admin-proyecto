@@ -156,7 +156,7 @@ services:
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
       - AI_SERVICE_URL=http://ai_service:5001
-      - RUN_SEED=true
+      - RUN_SEED=${RUN_SEED:-false}
     networks:
       - backend_net
       - db_net
