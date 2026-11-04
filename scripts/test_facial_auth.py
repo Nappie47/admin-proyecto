@@ -6,7 +6,7 @@ import cv2
 
 import os
 
-GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8000")
+GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost")
 
 def create_sample_face(color_seed=120):
     """Generates a synthetic 200x200 portrait image with face-like structures."""

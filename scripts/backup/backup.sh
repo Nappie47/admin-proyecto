@@ -17,27 +17,33 @@ fi
 
 DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-cementerio_db}"
+DB_HOST="${DB_HOST:-}"
 CONTAINER_NAME="sig_db_primary"
 
 echo "================================================================="
-echo " [SIG CEMENTERIO] Iniciando Respaldo de Base de Datos (Primario)"
+echo " [SIG CEMENTERIO] Iniciando Respaldo de Base de Datos"
 echo " Fecha/Hora: $(date)"
-echo " Base de datos: ${DB_NAME} en contenedor: ${CONTAINER_NAME}"
+echo " Base de datos: ${DB_NAME} (Host: ${DB_HOST:-contenedor local})"
 echo "================================================================="
 
 mkdir -p "${BACKUP_DIR}"
 
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo "[AVISO] El contenedor '${CONTAINER_NAME}' no está corriendo. Intentando con réplica..."
-    CONTAINER_NAME="sig_db_replica"
+if [ -n "${DB_HOST}" ] && [ "${DB_HOST}" != "localhost" ] && [ "${DB_HOST}" != "127.0.0.1" ]; then
+    echo "[1/3] Extrayendo volcado desde Cloud SQL (${DB_HOST}:${DB_PORT:-5432})..."
+    PGPASSWORD="${DB_PASSWORD:-}" pg_dump -h "${DB_HOST}" -p "${DB_PORT:-5432}" -U "${DB_USER}" -d "${DB_NAME}" --clean --if-exists | gzip > "${BACKUP_FILE}"
+else
     if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-        echo "[ERROR] Ni '${CONTAINER_NAME}' ni el nodo primario están disponibles."
-        exit 1
+        echo "[AVISO] El contenedor '${CONTAINER_NAME}' no está corriendo. Intentando con réplica..."
+        CONTAINER_NAME="sig_db_replica"
+        if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            echo "[ERROR] Ni '${CONTAINER_NAME}' ni el nodo primario están disponibles."
+            exit 1
+        fi
     fi
-fi
 
-echo "[1/3] Extrayendo volcado de PostgreSQL desde ${CONTAINER_NAME}..."
-docker exec -t "${CONTAINER_NAME}" pg_dump -U "${DB_USER}" -d "${DB_NAME}" --clean --if-exists | gzip > "${BACKUP_FILE}"
+    echo "[1/3] Extrayendo volcado de PostgreSQL desde ${CONTAINER_NAME}..."
+    docker exec -t "${CONTAINER_NAME}" pg_dump -U "${DB_USER}" -d "${DB_NAME}" --clean --if-exists | gzip > "${BACKUP_FILE}"
+fi
 
 if [ -s "${BACKUP_FILE}" ]; then
     FILE_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
