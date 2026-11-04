@@ -42,13 +42,5 @@ print("[ERROR] No se pudo conectar a la base de datos tras multiples intentos.")
 sys.exit(1)
 EOF
 
-RUN_SEED="${RUN_SEED:-true}"
-if [ "$RUN_SEED" = "true" ]; then
-    echo "[INFO] Ejecutando poblamiento inicial de tablas y datos (seed)..."
-    python -m seeds.seed_data || echo "[WARN] Seed ya poblado o no requerido."
-else
-    echo "[INFO] Omitiendo seed en este nodo secundario."
-fi
-
 echo "[INFO] Iniciando servidor Gunicorn WSGI en puerto 5000..."
 exec gunicorn --bind 0.0.0.0:5000 --workers 3 --timeout 120 "app:create_app()"

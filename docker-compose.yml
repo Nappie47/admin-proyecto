@@ -91,7 +91,6 @@ services:
       - DB_NAME=${DB_NAME:-cementerio_db}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - AI_SERVICE_URL=http://ai_service:5001
-      - RUN_SEED=${RUN_SEED:-false}
     networks:
       - cloud_net
     depends_on:
