@@ -1,22 +1,27 @@
-import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { 
-  Search, Layers, X, MapPin, Eye, ExternalLink, Info, Compass,
-  Edit3, Plus, Trash2, Save, Database, Undo2, RefreshCw, CheckCircle2
+  Search, Edit3, X, CheckCircle2, Info 
 } from 'lucide-react';
-import { sepulturaService, patioService, mausoleoService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { patioService, sepulturaService, mausoleoService } from '../services/api';
+import { MapLegend } from '../components/map/MapLegend';
+import { MapLayersMenu } from '../components/map/MapLayersMenu';
+import { PatioEditorDrawer } from '../components/map/PatioEditorDrawer';
+import { GraveDetailDrawer } from '../components/map/GraveDetailDrawer';
+import '../components/map/MapPage.css';
 
 const GoogleCemeteryMap = lazy(() => import('../components/GoogleCemeteryMap'));
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const BASE_MAPS = {
-  'google-roadmap': { name: 'Google Maps' },
-  'google-satellite': { name: 'Google Maps Satelital' },
+  'google-satellite': { name: 'Google Satélite' },
+  'google-roadmap': { name: 'Google Calles' }
 };
 
 const COLOR_PRESETS = [
-  '#1b4332', '#2d6a4f', '#40916c', '#52b788', '#74c69d',
-  '#1e3a8a', '#1d4ed8', '#0284c7', '#0f766e', '#854d0e'
+  '#2d6a4f', '#1b4332', '#40916c', '#52b788',
+  '#2563eb', '#0284c7', '#7c3aed', '#b45309',
+  '#dc2626', '#475569'
 ];
 
 export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, setActivePage }) => {
@@ -30,41 +35,33 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
   const [selectedGrave, setSelectedGrave] = useState(null);
   const [mapTarget, setMapTarget] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
-  
+
+  // Control de Mapas Base y Capas
   const [currentBaseMap, setCurrentBaseMap] = useState('google-satellite');
 
-  // Layer toggles
+  // Capas visibles
   const [showPatios, setShowPatios] = useState(true);
   const [showSepulturas, setShowSepulturas] = useState(true);
   const [showMausoleos, setShowMausoleos] = useState(true);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
 
-  // Patio Editor State
+  // Modo Editor de Patios (SIG)
   const [editorOpen, setEditorOpen] = useState(false);
-
   useEffect(() => {
-    if (canEditPatios && initialOpenEditor !== undefined) {
-      setEditorOpen(initialOpenEditor);
+    if (initialOpenEditor) {
+      setEditorOpen(true);
     }
-  }, [canEditPatios, initialOpenEditor]);
+  }, [initialOpenEditor]);
 
-  useEffect(() => {
-    if (!canEditPatios) {
-      setEditorOpen(false);
-      setEditingPatio(null);
-      setDrawingPoints([]);
-    }
-  }, [canEditPatios]);
-
-  const [editingPatio, setEditingPatio] = useState(null); // null when not in form, or patio object
+  const [editingPatio, setEditingPatio] = useState(null);
   const initialPatioEditStarted = useRef(false);
   const [drawingPoints, setDrawingPoints] = useState([]); // array of [lat, lng]
   const [formData, setFormData] = useState({
     numero: '',
     nombre: '',
     descripcion: '',
-    superficie_m2: '',
-    color_hex: '#2d6a4f'
+    color_hex: '#2d6a4f',
+    superficie_m2: ''
   });
   const [isSaving, setIsSaving] = useState(false);
   const [alertMsg, setAlertMsg] = useState(null);
@@ -77,12 +74,10 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
       const res = await patioService.list();
       if (res.data.success) {
         setPatios(res.data.patios);
-      } else {
-        throw new Error(res.data.error || 'El servidor no confirmó la lista de patios.');
       }
     } catch (err) {
       console.error('Error cargando patios:', err);
-      setDataLoadError(err.response?.data?.error || err.message || 'No se pudieron cargar los patios. Revisa la conexión con el backend.');
+      setDataLoadError(err.response?.data?.error || err.message || 'Error cargando patios.');
     }
   };
 
@@ -90,20 +85,21 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
     try {
       const allSepulturas = [];
       let page = 1;
-      let pages = 1;
+      let totalPages = 1;
 
-      while (page <= pages) {
+      do {
         const res = await sepulturaService.list({ page, per_page: 250 });
-        if (!res.data.success) {
-          throw new Error(res.data.error || 'La respuesta del servidor no incluyó las sepulturas.');
+        if (res.data.success) {
+          allSepulturas.push(...res.data.sepulturas);
+          totalPages = res.data.pages || 1;
+          page += 1;
+        } else {
+          break;
         }
-
-        allSepulturas.push(...res.data.sepulturas);
-        pages = res.data.pages || 1;
-        page += 1;
-      }
+      } while (page <= totalPages);
 
       setSepulturas(allSepulturas);
+
       if (initialGraveId) {
         const target = allSepulturas.find(s => s.id === initialGraveId);
         if (target) {
@@ -112,8 +108,8 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         }
       }
     } catch (err) {
-      console.error('Error cargando sepulturas:', err);
-      setDataLoadError(err.response?.data?.error || err.message || 'No se pudieron cargar las sepulturas. Revisa la conexión con el backend.');
+      console.error('Error cargando sepulturas en el mapa:', err);
+      setDataLoadError(err.response?.data?.error || err.message || 'Error cargando sepulturas.');
     }
   };
 
@@ -125,26 +121,36 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
       }
     } catch (err) {
       console.error('Error cargando mausoleos:', err);
-      setDataLoadError('No se pudieron cargar los mausoleos. Revisa la conexión con el backend.');
     }
   };
 
   useEffect(() => {
     let isCurrentRequest = true;
-    setIsLoadingRecords(true);
-    setDataLoadError(null);
-    Promise.all([loadPatios(), loadSepulturas(), loadMausoleos()])
-      .finally(() => {
-        if (isCurrentRequest) setIsLoadingRecords(false);
-      });
+
+    const loadMapData = async () => {
+      setIsLoadingRecords(true);
+      setDataLoadError(null);
+      try {
+        await Promise.all([loadPatios(), loadSepulturas(), loadMausoleos()]);
+      } catch (err) {
+        if (isCurrentRequest) {
+          setDataLoadError(err.message || 'Error cargando registros del cementerio.');
+        }
+      } finally {
+        if (isCurrentRequest) {
+          setIsLoadingRecords(false);
+        }
+      }
+    };
+
+    loadMapData();
+
     return () => {
       isCurrentRequest = false;
     };
   }, [initialGraveId]);
 
   // Suscripción WebSocket en tiempo real para actualizaciones automáticas del mapa
-  const [realtimeConnected, setRealtimeConnected] = useState(false);
-
   useEffect(() => {
     let ws = null;
     let reconnectTimer = null;
@@ -159,7 +165,6 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         ws.onopen = () => {
           if (isMounted) {
             console.log('[WebSocket SIG] Conectado a canal en tiempo real.');
-            setRealtimeConnected(true);
           }
         };
 
@@ -179,7 +184,6 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
 
         ws.onclose = () => {
           if (isMounted) {
-            setRealtimeConnected(false);
             reconnectTimer = setTimeout(connectWebSocket, 3000);
           }
         };
@@ -206,33 +210,32 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
     setMapTarget([grave.latitud, grave.longitud]);
   };
 
-  // Editor Actions
   const handleStartCreatePatio = () => {
-    const nextNum = patios.length > 0 ? Math.max(...patios.map(p => p.numero)) + 1 : 1;
-    setEditingPatio({ id: null });
-    setFormData({
-      numero: nextNum,
-      nombre: `Patio ${nextNum}`,
-      descripcion: '',
-      superficie_m2: '',
-      color_hex: COLOR_PRESETS[(nextNum - 1) % COLOR_PRESETS.length]
-    });
+    setEditingPatio({ isNew: true });
     setDrawingPoints([]);
-    setSelectedGrave(null);
+    setFormData({
+      numero: '',
+      nombre: '',
+      descripcion: '',
+      color_hex: '#2d6a4f',
+      superficie_m2: ''
+    });
   };
 
   const handleStartEditPatio = (patio) => {
+    setEditorOpen(true);
     setEditingPatio(patio);
     setFormData({
       numero: patio.numero,
-      nombre: patio.nombre,
+      nombre: patio.nombre || '',
       descripcion: patio.descripcion || '',
-      superficie_m2: patio.superficie_m2 || '',
-      color_hex: patio.color_hex || '#2d6a4f'
+      color_hex: patio.color_hex || '#2d6a4f',
+      superficie_m2: patio.superficie_m2 || ''
     });
-    // Extract points from GeoJSON [lng, lat] -> [lat, lng]
+
     if (patio.geometry && patio.geometry.type === 'Polygon') {
-      const pts = patio.geometry.coordinates[0].map(c => [c[1], c[0]]);
+      const ring = patio.geometry.coordinates[0];
+      const pts = ring.slice(0, ring.length - 1).map(c => [c[1], c[0]]);
       setDrawingPoints(pts);
       if (pts.length > 0) {
         setMapTarget(pts[0]);
@@ -240,18 +243,17 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
     } else {
       setDrawingPoints([]);
     }
-    setSelectedGrave(null);
   };
 
   useEffect(() => {
-    if (!canEditPatios || initialPatioEditStarted.current || !initialPatioId) return;
-    const patio = patios.find(item => item.id === initialPatioId);
-    if (!patio) return;
-
-    initialPatioEditStarted.current = true;
-    setEditorOpen(true);
-    handleStartEditPatio(patio);
-  }, [canEditPatios, initialPatioId, patios]);
+    if (initialPatioId && patios.length > 0 && !initialPatioEditStarted.current) {
+      const patio = patios.find(p => p.id === initialPatioId);
+      if (patio) {
+        initialPatioEditStarted.current = true;
+        handleStartEditPatio(patio);
+      }
+    }
+  }, [initialPatioId, patios]);
 
   const handleCancelEdit = () => {
     setEditingPatio(null);
@@ -259,13 +261,13 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
   };
 
   const handleMapClick = (latlng) => {
-    if (editingPatio) {
+    if (editorOpen && editingPatio) {
       setDrawingPoints(prev => [...prev, latlng]);
     }
   };
 
   const handleUndoPoint = () => {
-    setDrawingPoints(prev => prev.slice(0, -1));
+    setDrawingPoints(prev => prev.slice(0, prev.length - 1));
   };
 
   const handleClearPoints = () => {
@@ -274,45 +276,39 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
 
   const handleSavePatio = async (e) => {
     e.preventDefault();
-    if (!formData.nombre || !formData.numero) {
-      setAlertMsg({ type: 'error', text: 'El número y nombre del patio son obligatorios' });
-      return;
-    }
     if (drawingPoints.length < 3) {
-      setAlertMsg({ type: 'error', text: 'Debe marcar al menos 3 puntos en el mapa para delimitar el polígono del patio' });
+      setAlertMsg({ type: 'error', text: 'Debes marcar al menos 3 vértices en el mapa para delimitar el polígono.' });
       return;
     }
 
     setIsSaving(true);
     setAlertMsg(null);
 
-    // Convert [lat, lng] points to GeoJSON Polygon [[lng, lat], ...]
-    const coordinates = drawingPoints.map(p => [Number(p[1].toFixed(6)), Number(p[0].toFixed(6))]);
-    // Ensure closed ring
-    if (coordinates[0][0] !== coordinates[coordinates.length - 1][0] || coordinates[0][1] !== coordinates[coordinates.length - 1][1]) {
-      coordinates.push(coordinates[0]);
-    }
-
-    const payload = {
-      numero: Number(formData.numero),
-      nombre: formData.nombre,
-      descripcion: formData.descripcion,
-      superficie_m2: Number(formData.superficie_m2) || 0,
-      color_hex: formData.color_hex,
-      geom_geojson: {
-        type: 'Polygon',
-        coordinates: [coordinates]
-      }
-    };
-
     try {
+      const coords = drawingPoints.map(p => [p[1], p[0]]);
+      coords.push(coords[0]); // Cerrar el polígono
+      const geojson = {
+        type: 'Polygon',
+        coordinates: [coords]
+      };
+
+      const payload = {
+        numero: parseInt(formData.numero, 10),
+        nombre: formData.nombre,
+        descripcion: formData.descripcion,
+        color_hex: formData.color_hex,
+        superficie_m2: formData.superficie_m2 ? parseFloat(formData.superficie_m2) : null,
+        geometry: geojson
+      };
+
       if (editingPatio.id) {
         await patioService.update(editingPatio.id, payload);
-        setAlertMsg({ type: 'success', text: `¡Patio ${payload.numero} actualizado correctamente!` });
+        setAlertMsg({ type: 'success', text: `Patio ${formData.numero} actualizado correctamente.` });
       } else {
         await patioService.create(payload);
-        setAlertMsg({ type: 'success', text: `¡Patio ${payload.numero} guardado correctamente!` });
+        setAlertMsg({ type: 'success', text: `Patio ${formData.numero} creado con éxito.` });
       }
+
       await loadPatios();
       setEditingPatio(null);
       setDrawingPoints([]);
@@ -354,24 +350,18 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
   return (
     <div className="map-page">
       {/* Top Banner and Filter Bar */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 100, flexWrap: 'wrap', gap: '0.75rem' }}>
+      <div className="map-page-header">
         <div>
-          <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#2d6a4f', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <span className="map-page-title-badge">
             SIG Cementerio General Los Ángeles
           </span>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f2d1e', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2 className="map-page-title">
             Mapa interactivo del cementerio
           </h2>
         </div>
 
         {/* Search bar, Capas & Editor toggle */}
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {realtimeConnected && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: '#16a34a', backgroundColor: '#dcfce7', padding: '4px 9px', borderRadius: '999px', fontWeight: '600' }} title="Sincronización en tiempo real vía WebSocket activa">
-              <span style={{ width: '6px', height: '6px', backgroundColor: '#16a34a', borderRadius: '50%', display: 'inline-block' }}></span>
-              En vivo (WebSocket)
-            </span>
-          )}
+        <div className="map-page-toolbar">
           <div style={{ position: 'relative', width: '220px', flex: '1 1 180px' }}>
             <Search size={15} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
             <input
@@ -384,73 +374,22 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
             />
           </div>
 
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setLayersMenuOpen(!layersMenuOpen)}
-              className="btn-secondary"
-              style={{ height: '36px', padding: '0 0.85rem', fontSize: '0.84rem' }}
-            >
-              <Layers size={15} />
-              Capas
-            </button>
-
-            {layersMenuOpen && (
-              <div style={{ position: 'absolute', right: 0, top: '42px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 12px 28px rgba(0,0,0,0.15)', padding: '1rem', width: '270px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
-                    Mapa base
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    {Object.entries(BASE_MAPS).map(([key, bm]) => (
-                      <label
-                        key={key}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          fontSize: '0.82rem',
-                          cursor: 'pointer',
-                          padding: '0.25rem 0.4rem',
-                          borderRadius: '6px',
-                          backgroundColor: currentBaseMap === key ? '#e8f5e9' : 'transparent',
-                          fontWeight: currentBaseMap === key ? '600' : 'normal',
-                          color: currentBaseMap === key ? '#1b4332' : '#334155'
-                        }}
-                      >
-                        <input
-                          type="radio"
-                          name="baseMap"
-                          checked={currentBaseMap === key}
-                          onChange={() => setCurrentBaseMap(key)}
-                        />
-                        {bm.name}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.6rem' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
-                    Capas Activas
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.84rem', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={showPatios} onChange={(e) => setShowPatios(e.target.checked)} />
-                      Patios ({patios.length})
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.84rem', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={showSepulturas} onChange={(e) => setShowSepulturas(e.target.checked)} />
-                      Sepulturas ({sepulturas.length})
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.84rem', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={showMausoleos} onChange={(e) => setShowMausoleos(e.target.checked)} />
-                      Mausoleos Históricos ({mausoleos.length})
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <MapLayersMenu
+            isOpen={layersMenuOpen}
+            onToggle={() => setLayersMenuOpen(!layersMenuOpen)}
+            baseMaps={BASE_MAPS}
+            currentBaseMap={currentBaseMap}
+            onSelectBaseMap={setCurrentBaseMap}
+            showPatios={showPatios}
+            onTogglePatios={setShowPatios}
+            patiosCount={patios.length}
+            showSepulturas={showSepulturas}
+            onToggleSepulturas={setShowSepulturas}
+            sepulturasCount={sepulturas.length}
+            showMausoleos={showMausoleos}
+            onToggleMausoleos={setShowMausoleos}
+            mausoleosCount={mausoleos.length}
+          />
 
           {canEditPatios && (
             <button
@@ -541,449 +480,39 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         )}
 
         {/* Bottom Left Legend Box */}
-        <div style={{
-          position: 'absolute',
-          bottom: 'clamp(12px, 2vw, 24px)',
-          left: 'clamp(12px, 2vw, 24px)',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(8px)',
-          borderRadius: '12px',
-          padding: '0.85rem 1rem',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
-          zIndex: 1000,
-          width: 'min(210px, calc(100vw - 24px))',
-          fontSize: '0.78rem',
-        }}>
-          <div style={{ fontWeight: '700', color: '#0f2d1e', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Leyenda SIG
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#2563eb', border: '1px solid white' }} />
-              <span>Seleccionada</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#0284c7' }} />
-              <span>Disponible</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#2d6a4f' }} />
-              <span>Ocupada</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#b45309' }} />
-              <span>Mausoleo histórico</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '12px', height: '12px', backgroundColor: 'rgba(45, 106, 79, 0.25)', border: '1px dashed #2d6a4f' }} />
-              <span>Límite de patio</span>
-            </div>
-          </div>
-        </div>
+        <MapLegend />
 
         {/* EDITOR DE PATIOS DRAWER (Slide-out panel) */}
-        {editorOpen && (
-          <div style={{
-            position: 'absolute',
-            right: 'clamp(8px, 2vw, 24px)',
-            top: 'clamp(8px, 2vw, 24px)',
-            bottom: 'clamp(8px, 2vw, 24px)',
-            width: 'min(380px, calc(100vw - 16px))',
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 16px 36px rgba(0,0,0,0.18)',
-            zIndex: 1000,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            animation: 'modalFadeIn 0.25s ease-out'
-          }}>
-            {/* Editor Header */}
-            <div style={{ padding: '1.1rem 1.25rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f2d1e', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Database size={17} color="#2d6a4f" />
-                  Editor de Patios & Límites
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Los cambios se guardan en la base de datos configurada.
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  setEditorOpen(false);
-                  setEditingPatio(null);
-                  setDrawingPoints([]);
-                }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Editor Body */}
-            <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="map-editor-hint">
-                <strong>Delimita sectores reales</strong>
-                <span>Usa la imagen satelital para identificar el perímetro. Los cambios solo se guardan al confirmar el formulario.</span>
-              </div>
-
-              {/* Si estamos creando o editando un patio */}
-              {editingPatio ? (
-                <form onSubmit={handleSavePatio} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: '700', color: '#1b4332', fontSize: '0.9rem' }}>
-                      {editingPatio.id ? `Modificar Patio ${formData.numero}` : 'Nuevo Patio'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="btn-secondary"
-                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-
-                  {/* Instrucciones de Dibujo */}
-                  <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.65rem', fontSize: '0.76rem', color: '#1e40af' }}>
-                    <strong>Modo dibujo:</strong> Haz clic sobre el mapa para marcar los vértices del perímetro. Haz zoom para ubicar cada esquina con precisión.
-                    <div style={{ marginTop: '0.35rem', fontWeight: '700' }}>
-                      Vértices marcados: {drawingPoints.length} {drawingPoints.length >= 3 ? '✓ (mínimo alcanzado; se valida al guardar)' : '(Mínimo 3)'}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      type="button"
-                      onClick={handleUndoPoint}
-                      disabled={drawingPoints.length === 0}
-                      className="btn-secondary"
-                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.35rem' }}
-                    >
-                      <Undo2 size={13} />
-                      Deshacer punto
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleClearPoints}
-                      disabled={drawingPoints.length === 0}
-                      className="btn-secondary"
-                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.35rem' }}
-                    >
-                      Limpiar todo
-                    </button>
-                  </div>
-
-                  {/* Campos del Formulario */}
-                  <div style={{ display: 'flex', gap: '0.6rem' }}>
-                    <div style={{ width: '90px' }}>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>
-                        Número
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="99"
-                        required
-                        className="form-input"
-                        value={formData.numero}
-                        onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                        style={{ height: '34px', fontSize: '0.84rem' }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>
-                        Superficie (m²)
-                      </label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        placeholder="Ej: 4500"
-                        value={formData.superficie_m2}
-                        onChange={(e) => setFormData({ ...formData, superficie_m2: e.target.value })}
-                        style={{ height: '34px', fontSize: '0.84rem' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>
-                      Nombre del Patio
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ej: Patio 1 - Acceso Histórico"
-                      className="form-input"
-                      value={formData.nombre}
-                      onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                      style={{ height: '34px', fontSize: '0.84rem' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>
-                      Descripción / Sector
-                    </label>
-                    <textarea
-                      rows={2}
-                      className="form-input"
-                      placeholder="Breve reseña del sector o patio..."
-                      value={formData.descripcion}
-                      onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                      style={{ fontSize: '0.8rem', resize: 'vertical' }}
-                    />
-                  </div>
-
-                  {/* Selector de color */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>
-                      Color del Polígono
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                      {COLOR_PRESETS.map(col => (
-                        <div
-                          key={col}
-                          onClick={() => setFormData({ ...formData, color_hex: col })}
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '4px',
-                            backgroundColor: col,
-                            cursor: 'pointer',
-                            border: formData.color_hex === col ? '2px solid black' : '1px solid rgba(0,0,0,0.15)',
-                            transform: formData.color_hex === col ? 'scale(1.15)' : 'none'
-                          }}
-                        />
-                      ))}
-                      <input
-                        type="color"
-                        value={formData.color_hex}
-                        onChange={(e) => setFormData({ ...formData, color_hex: e.target.value })}
-                        style={{ width: '32px', height: '26px', padding: 0, border: 'none', cursor: 'pointer' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Botón Guardar en DB */}
-                  <button
-                    type="submit"
-                    disabled={isSaving || drawingPoints.length < 3}
-                    className="btn-primary"
-                    style={{ marginTop: '0.5rem', justifyContent: 'center', height: '38px', fontSize: '0.85rem' }}
-                  >
-                    {isSaving ? (
-                      <>
-                        <RefreshCw size={15} className="animate-spin" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save size={15} />
-                        Guardar en la base de datos
-                      </>
-                    )}
-                  </button>
-                </form>
-              ) : (
-                /* Lista de Patios Existentes */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#475569', textTransform: 'uppercase' }}>
-                      Patios en Base de Datos ({patios.length})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleStartCreatePatio}
-                      className="btn-primary"
-                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
-                    >
-                      <Plus size={14} />
-                      Crear Patio
-                    </button>
-                  </div>
-
-                  {patios.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: '8px', color: '#64748b', fontSize: '0.82rem' }}>
-                      No hay sectores dibujados todavía.<br />
-                      Usa “Crear patio” para comenzar a delimitar la muestra.
-                    </div>
-                  ) : (
-                    patios.map(p => (
-                      <div
-                        key={p.id}
-                        style={{
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
-                          padding: '0.75rem',
-                          backgroundColor: '#fafafa',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.4rem'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: p.color_hex || '#2d6a4f' }} />
-                            <strong style={{ fontSize: '0.85rem', color: '#0f2d1e' }}>
-                              Patio {p.numero}: {p.nombre}
-                            </strong>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.3rem' }}>
-                            <button
-                              onClick={() => handleStartEditPatio(p)}
-                              title="Editar límites satelitales"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', padding: '2px' }}
-                            >
-                              <Edit3 size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleDeletePatio(p)}
-                              title="Eliminar patio de la base de datos"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px' }}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          {p.descripcion || 'Sin descripción'}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#475569', borderTop: '1px solid #f1f5f9', paddingTop: '0.3rem' }}>
-                          <span>Superficie: {p.superficie_m2} m²</span>
-                          <span>Sepulturas: {p.total_sepulturas || 0}</span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <PatioEditorDrawer
+          isOpen={editorOpen}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditingPatio(null);
+            setDrawingPoints([]);
+          }}
+          editingPatio={editingPatio}
+          onCancelEdit={handleCancelEdit}
+          drawingPoints={drawingPoints}
+          onUndoPoint={handleUndoPoint}
+          onClearPoints={handleClearPoints}
+          formData={formData}
+          setFormData={setFormData}
+          colorPresets={COLOR_PRESETS}
+          onSavePatio={handleSavePatio}
+          isSaving={isSaving}
+          patios={patios}
+          onStartCreatePatio={handleStartCreatePatio}
+          onStartEditPatio={handleStartEditPatio}
+          onDeletePatio={handleDeletePatio}
+        />
 
         {/* Slide-out Sidebar Drawer when Grave is Selected */}
-        {selectedGrave && !editorOpen && (
-          <div style={{
-            position: 'absolute',
-            right: 'clamp(8px, 2vw, 24px)',
-            top: 'clamp(8px, 2vw, 24px)',
-            bottom: 'clamp(8px, 2vw, 24px)',
-            width: 'min(350px, calc(100vw - 16px))',
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 16px 36px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            animation: 'modalFadeIn 0.25s ease-out'
-          }}>
-            {/* Drawer Header */}
-            <div style={{ padding: '1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f2d1e', margin: 0 }}>
-                  Sepultura {selectedGrave.numero}
-                </h3>
-                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  Patio {selectedGrave.patio_numero} • Sector {selectedGrave.sector}
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedGrave(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Drawer Body */}
-            <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1 }}>
-              {/* Photo */}
-              <div style={{ height: '140px', borderRadius: '10px', overflow: 'hidden', marginBottom: '1rem', backgroundColor: '#f1f5f9' }}>
-                <img
-                  src={selectedGrave.foto_url || "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=600&q=80"}
-                  alt="Sepultura"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              </div>
-
-              {/* Data Table */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                  <span style={{ color: '#64748b' }}>Número</span>
-                  <span style={{ fontWeight: '600' }}>{selectedGrave.numero}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                  <span style={{ color: '#64748b' }}>Tipo</span>
-                  <span style={{ fontWeight: '600' }}>{selectedGrave.tipo}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                  <span style={{ color: '#64748b' }}>Estado</span>
-                  <span className={`badge-status ${selectedGrave.estado.toLowerCase().replace(' ', '-')}`}>
-                    {selectedGrave.estado}
-                  </span>
-                </div>
-                {selectedGrave.nombre_completo && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                    <span style={{ color: '#64748b' }}>Nombre</span>
-                    <span style={{ fontWeight: '700', color: '#1b4332' }}>{selectedGrave.nombre_completo}</span>
-                  </div>
-                )}
-                {selectedGrave.fecha_fallecimiento && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                    <span style={{ color: '#64748b' }}>Fecha de fallecimiento</span>
-                    <span style={{ fontWeight: '600' }}>{selectedGrave.fecha_fallecimiento}</span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                  <span style={{ color: '#64748b' }}>Ubicación</span>
-                  <span style={{ fontWeight: '600' }}>{selectedGrave.ubicacion_detalle || `Patio ${selectedGrave.patio_numero}`}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-                  <span style={{ color: '#64748b' }}>Coordenadas</span>
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#475569' }}>
-                    {selectedGrave.latitud?.toFixed(5)}, {selectedGrave.longitud?.toFixed(5)}
-                  </span>
-                </div>
-              </div>
-
-              {selectedGrave.observaciones && (
-                <div style={{ marginTop: '1rem', backgroundColor: '#f8fafc', padding: '0.75rem', borderRadius: '8px', fontSize: '0.78rem', color: '#475569', lineHeight: '1.4' }}>
-                  <strong>Observaciones:</strong> {selectedGrave.observaciones}
-                </div>
-              )}
-            </div>
-
-            {/* Drawer Actions */}
-            <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <button
-                onClick={() => setMapTarget([selectedGrave.latitud, selectedGrave.longitud])}
-                className="btn-secondary"
-                style={{ width: '100%', justifyContent: 'center', fontSize: '0.85rem' }}
-              >
-                <MapPin size={15} color="#2d6a4f" />
-                Centrar en el mapa
-              </button>
-              {!selectedGrave.isMausoleo && (
-                <button
-                  onClick={() => setActivePage({ name: 'detail', id: selectedGrave.id })}
-                  className="btn-primary"
-                  style={{ width: '100%', justifyContent: 'center', fontSize: '0.85rem' }}
-                >
-                  <Eye size={15} />
-                  Ver más información
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        <GraveDetailDrawer
+          grave={selectedGrave && !editorOpen ? selectedGrave : null}
+          onClose={() => setSelectedGrave(null)}
+          onCenterOnMap={() => setMapTarget([selectedGrave.latitud, selectedGrave.longitud])}
+          onViewDetails={() => setActivePage({ name: 'detail', id: selectedGrave.id })}
+        />
       </div>
     </div>
   );

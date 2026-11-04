@@ -1,0 +1,131 @@
+/* Map Page Modular Styles */
+
+.map-page-header {
+  background-color: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.75rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.map-page-title-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #2d6a4f;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.map-page-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f2d1e;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.map-page-toolbar {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Floating Map Legend */
+.map-legend-box {
+  position: absolute;
+  bottom: clamp(12px, 2vw, 24px);
+  left: clamp(12px, 2vw, 24px);
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  width: min(210px, calc(100vw - 24px));
+  font-size: 0.78rem;
+}
+
+.map-legend-title {
+  font-weight: 700;
+  color: #0f2d1e;
+  margin-bottom: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.map-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Slide-out Drawers */
+.map-drawer-panel {
+  position: absolute;
+  right: clamp(8px, 2vw, 24px);
+  top: clamp(8px, 2vw, 24px);
+  bottom: clamp(8px, 2vw, 24px);
+  background-color: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalFadeIn 0.25s ease-out;
+}
+
+.map-drawer-header {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.map-drawer-body {
+  padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.map-drawer-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Layers dropdown menu */
+.map-layers-menu {
+  position: absolute;
+  right: 0;
+  top: 42px;
+  background-color: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
+  padding: 1rem;
+  width: 270px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
