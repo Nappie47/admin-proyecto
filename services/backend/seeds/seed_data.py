@@ -20,6 +20,16 @@ def run_seed():
         safe_uri = db_uri.split('@')[-1] if '@' in db_uri else db_uri
         print(f"[INFO] Conectando a Base de Datos: {safe_uri}")
         print("[INFO] Iniciando poblamiento de base de datos...")
+        try:
+            from sqlalchemy import text
+            db.session.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+            db.session.execute(text("CREATE EXTENSION IF NOT EXISTS postgis_topology;"))
+            db.session.commit()
+            print("[+] Extensiones PostGIS verificadas/activadas correctamente.")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[!] Aviso PostGIS: {e}")
+
         db.create_all()
 
         # 1. Patios (5 patios actualizados en el predio real del Cementerio General de Los Ángeles)

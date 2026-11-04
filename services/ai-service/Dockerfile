@@ -33,7 +33,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código fuente, datos pre-enrolados y modelos biométricos
 COPY models ./models
-COPY data ./data
 COPY face_engine.py app.py ./
 RUN mkdir -p /app/data/faces && \
     chown -R appuser:appgroup /app
