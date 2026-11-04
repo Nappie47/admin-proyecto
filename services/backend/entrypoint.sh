@@ -42,5 +42,5 @@ print("[ERROR] No se pudo conectar a la base de datos tras multiples intentos.")
 sys.exit(1)
 EOF
 
-echo "[INFO] Iniciando servidor Gunicorn WSGI en puerto 5000..."
-exec gunicorn --bind 0.0.0.0:5000 --workers 3 --timeout 120 "app:create_app()"
+echo "[INFO] Iniciando servidor Gunicorn WSGI con soporte WebSocket (gthread) en puerto 5000..."
+exec gunicorn --bind 0.0.0.0:5000 -k gthread --threads 16 --workers 1 --timeout 120 "app:create_app()"

@@ -3,6 +3,7 @@ from flask import Flask, jsonify
 from config import Config, validate_security_config
 from extensions import db, jwt, cors
 from routes import auth_bp, user_bp, sepultura_bp, patio_bp, mausoleo_bp
+from websocket_manager import register_websocket_routes, register_model_events, start_postgres_listener
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -26,6 +27,14 @@ def create_app(config_class=Config):
     app.register_blueprint(sepultura_bp)
     app.register_blueprint(patio_bp)
     app.register_blueprint(mausoleo_bp)
+
+    # Registrar WebSockets y sincronizacion de mapa en tiempo real
+    register_websocket_routes(app)
+    register_model_events()
+    try:
+        start_postgres_listener()
+    except Exception as e:
+        print(f'[WARN] No se inicio listener de Postgres: {e}')
 
     @app.route('/api/health', methods=['GET'])
     def health_check():
