@@ -306,8 +306,8 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         </div>
 
         {/* Search bar, Capas & Editor toggle */}
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <div style={{ position: 'relative', width: '240px' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', width: '220px', flex: '1 1 180px' }}>
             <Search size={15} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
             <input
               type="text"
@@ -478,16 +478,16 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         {/* Bottom Left Legend Box */}
         <div style={{
           position: 'absolute',
-          bottom: '24px',
-          left: '24px',
+          bottom: 'clamp(12px, 2vw, 24px)',
+          left: 'clamp(12px, 2vw, 24px)',
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(8px)',
           borderRadius: '12px',
-          padding: '1rem',
+          padding: '0.85rem 1rem',
           border: '1px solid #e2e8f0',
           boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
           zIndex: 1000,
-          width: '210px',
+          width: 'min(210px, calc(100vw - 24px))',
           fontSize: '0.78rem',
         }}>
           <div style={{ fontWeight: '700', color: '#0f2d1e', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -521,10 +521,10 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         {editorOpen && (
           <div style={{
             position: 'absolute',
-            right: '24px',
-            top: '24px',
-            bottom: '24px',
-            width: '380px',
+            right: 'clamp(8px, 2vw, 24px)',
+            top: 'clamp(8px, 2vw, 24px)',
+            bottom: 'clamp(8px, 2vw, 24px)',
+            width: 'min(380px, calc(100vw - 16px))',
             backgroundColor: 'white',
             borderRadius: '16px',
             border: '1px solid #e2e8f0',
@@ -806,10 +806,10 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
         {selectedGrave && !editorOpen && (
           <div style={{
             position: 'absolute',
-            right: '24px',
-            top: '24px',
-            bottom: '24px',
-            width: '350px',
+            right: 'clamp(8px, 2vw, 24px)',
+            top: 'clamp(8px, 2vw, 24px)',
+            bottom: 'clamp(8px, 2vw, 24px)',
+            width: 'min(350px, calc(100vw - 16px))',
             backgroundColor: 'white',
             borderRadius: '16px',
             border: '1px solid #e2e8f0',

@@ -174,10 +174,10 @@ export const GraveModal = ({
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '600px', padding: '1.5rem 2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0f2d1e' }}>
-            {isEditing ? `Editar Sepultura #${sepultura.numero}` : 'Registrar Nueva Sepultura (RF04)'}
+      <div className="modal-content" style={{ maxWidth: '600px', width: '95%', padding: '1.25rem 1.5rem', maxHeight: '92vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f2d1e' }}>
+            {isEditing ? `Editar Sepultura #${sepultura.numero}` : 'Registrar Nueva Sepultura'}
           </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
             <X size={22} />
@@ -348,9 +348,9 @@ export const GraveModal = ({
           {formData.estado === 'Ocupada' && (
             <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1e4d3b', marginBottom: '0.75rem' }}>
-                Datos del Fallecido (RF04 / RF07)
+                Datos del Fallecido
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', marginBottom: '0.2rem' }}>Nombre</label>
                   <input type="text" name="nombre_fallecido" value={formData.nombre_fallecido} onChange={handleChange} className="form-input" placeholder="Ej. Juan" />

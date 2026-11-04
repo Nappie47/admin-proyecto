@@ -226,11 +226,11 @@ export const UserModal = ({ isOpen, onClose, user, onSaved }) => {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '540px', padding: '1.5rem 2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal-content" style={{ maxWidth: '540px', width: '95%', padding: '1.25rem 1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f2d1e', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f2d1e', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
             <UserCheck size={20} color="#2d6a4f" />
-            {isEditing ? `Editar Usuario: ${user.username}` : 'Registrar Nuevo Usuario Interno (RF03)'}
+            {isEditing ? `Editar Usuario: ${user.username}` : 'Registrar Nuevo Usuario Interno'}
           </h3>
           <button onClick={() => { stopCamera(); onClose(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
             <X size={20} />
@@ -278,7 +278,7 @@ export const UserModal = ({ isOpen, onClose, user, onSaved }) => {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', marginBottom: '0.3rem' }}>Rol (RF02) *</label>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', marginBottom: '0.3rem' }}>Rol *</label>
               <select
                 value={formData.rol}
                 onChange={(e) => setFormData({ ...formData, rol: e.target.value })}

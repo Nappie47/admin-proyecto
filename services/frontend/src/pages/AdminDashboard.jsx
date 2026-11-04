@@ -39,7 +39,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
   const [filterTipo, setFilterTipo] = useState('Todos');
   const [filterEstado, setFilterEstado] = useState('Todos');
 
-  // Users State (RF03)
+  // Users State
   const [usersList, setUsersList] = useState([]);
 
   // Patios State
@@ -110,7 +110,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
     }
   };
 
-  // Load users (RF03)
+  // Load users
   const fetchUsers = async () => {
     if (!isAdmin) return;
     try {
@@ -173,7 +173,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
   };
 
   const handleDeleteGrave = async (id, numero) => {
-    if (window.confirm(`¿Está seguro de desactivar la sepultura #${numero}? (RF06)`)) {
+    if (window.confirm(`¿Está seguro de desactivar la sepultura #${numero}?`)) {
       try {
         await sepulturaService.delete(id);
         setNotification({ type: 'success', message: `Sepultura #${numero} desactivada correctamente.` });
@@ -186,7 +186,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
   };
 
   const handleDeactivateUser = async (id, username) => {
-    if (window.confirm(`¿Está seguro de desactivar al usuario ${username}? (RF03)`)) {
+    if (window.confirm(`¿Está seguro de desactivar al usuario ${username}?`)) {
       try {
         await userService.delete(id);
         setNotification({ type: 'success', message: `Usuario ${username} desactivado.` });
@@ -306,7 +306,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
       </div>
 
       {/* Tabs navigation */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', whiteSpace: 'nowrap' }}>
         <button
           onClick={() => setActiveTab('sepulturas')}
           style={{
@@ -317,7 +317,8 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
             color: activeTab === 'sepulturas' ? 'white' : '#64748b',
             fontWeight: '600',
             fontSize: '0.88rem',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            flexShrink: 0
           }}
         >
           Sepulturas
@@ -333,7 +334,8 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
             color: activeTab === 'patios' ? 'white' : '#64748b',
             fontWeight: '600',
             fontSize: '0.88rem',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            flexShrink: 0
           }}
         >
           Patios Topográficos ({patiosList.length})
@@ -350,7 +352,8 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
               color: activeTab === 'usuarios' ? 'white' : '#64748b',
               fontWeight: '600',
               fontSize: '0.88rem',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              flexShrink: 0
             }}
           >
             Usuarios Internos
@@ -569,8 +572,9 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
             </div>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
-            <thead>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: '1.5rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem', minWidth: '600px' }}>
+              <thead>
               <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                 <th style={{ padding: '0.75rem 1rem' }}>Patio</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Nombre del Sector</th>
@@ -659,16 +663,17 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
-      {/* Users Tab (RF03 - Admin Only) */}
+      {/* Users Tab */}
       {activeTab === 'usuarios' && isAdmin && (
         <div style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '1.75rem', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0f2d1e', margin: 0 }}>
-                Gestión de Usuarios Internos (RF03)
+                Gestión de Usuarios Internos
               </h3>
               <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
                 Administra funcionarios municipales autorizados para el catastro y edición.
@@ -684,8 +689,9 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
             </button>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
-            <thead>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: '1.5rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem', minWidth: '600px' }}>
+              <thead>
               <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                 <th style={{ padding: '0.75rem 1rem' }}>Nombre Completo</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Usuario</th>
@@ -762,6 +768,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

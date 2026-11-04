@@ -658,4 +658,53 @@ body {
     bottom: 0.5rem !important;
     width: min(360px, calc(100vw - 1rem)) !important;
   }
+
+  /* Responsive tables & cards across all views */
+  table {
+    min-width: 580px;
+  }
+}
+
+/* Teléfonos y pantallas móviles compactas */
+@media (max-width: 480px) {
+  .navbar {
+    padding: 0 0.6rem;
+  }
+
+  .brand-title {
+    font-size: 0.88rem;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .home-hero {
+    padding: 1.35rem 1rem !important;
+    min-height: auto;
+  }
+
+  .home-hero h1 {
+    font-size: 1.75rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .home-quick-actions {
+    grid-template-columns: 1fr !important;
+    gap: 0.65rem !important;
+  }
+
+  .modal-overlay {
+    padding: 0.4rem !important;
+  }
+
+  .modal-content {
+    padding: 1rem !important;
+    border-radius: 12px !important;
+  }
+
+  .btn-primary, .btn-secondary {
+    padding: 0.5rem 0.85rem;
+    font-size: 0.84rem;
+  }
 }

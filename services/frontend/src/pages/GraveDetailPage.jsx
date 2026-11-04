@@ -90,7 +90,7 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
       </div>
 
       {/* Main Grid: Data Card + Mini Map */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
         {/* Left: Detailed Alphanumeric Specs */}
         <div style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '2rem', boxShadow: '0 4px 16px rgba(0,0,0,0.04)' }}>
           {/* Card Header with Badges */}

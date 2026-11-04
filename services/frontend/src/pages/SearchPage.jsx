@@ -130,8 +130,8 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
       {/* Main Search Bar */}
       <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)', marginBottom: '2rem' }}>
         <form onSubmit={handleFormSubmit}>
-          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 'min(240px, 100%)' }}>
               <Search size={18} style={{ position: 'absolute', left: '14px', top: '13px', color: '#94a3b8' }} />
               <input
                 type="text"
@@ -142,7 +142,7 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
                 style={{ paddingLeft: '2.6rem', height: '44px' }}
               />
             </div>
-            <button type="submit" className="btn-primary" style={{ padding: '0 1.8rem', height: '44px' }}>
+            <button type="submit" className="btn-primary" style={{ padding: '0 1.8rem', height: '44px', minWidth: '100px' }}>
               Buscar
             </button>
           </div>
@@ -281,7 +281,7 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
               }}
             >
               {/* Left Column: Icon + Name + Dates */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', minWidth: '320px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0, flex: 1 }}>
                 <div style={{
                   width: '46px',
                   height: '46px',

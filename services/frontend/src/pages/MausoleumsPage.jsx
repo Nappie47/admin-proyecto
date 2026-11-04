@@ -23,7 +23,7 @@ export const MausoleumsPage = ({ setActivePage }) => {
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#fef3c7', padding: '0.3rem 0.8rem', borderRadius: '9999px', fontSize: '0.78rem', fontWeight: '700', color: '#b45309', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           <Sparkles size={14} />
-          Catastro Histórico y Patrimonial (RF12)
+          Catastro Histórico y Patrimonial
         </div>
         <h1 style={{ fontSize: '2.25rem', fontWeight: '800', color: '#0f2d1e', margin: '0 0 0.5rem 0' }}>
           Mausoleos Emblemáticos de Los Ángeles
@@ -38,7 +38,7 @@ export const MausoleumsPage = ({ setActivePage }) => {
           Cargando catálogo patrimonial...
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(290px, 100%), 1fr))', gap: '1.5rem' }}>
           {mausoleos.map((m) => (
             <div
               key={m.id}
