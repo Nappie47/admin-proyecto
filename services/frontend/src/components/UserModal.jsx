@@ -23,6 +23,9 @@ export const UserModal = ({ isOpen, onClose, user, onSaved }) => {
   // Biometrics State
   const [hasBiometrics, setHasBiometrics] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
   const [biometricImage, setBiometricImage] = useState(null);
   const [biometricLoading, setBiometricLoading] = useState(false);
 
@@ -36,8 +39,16 @@ export const UserModal = ({ isOpen, onClose, user, onSaved }) => {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    setCameraStream(null);
     setShowCamera(false);
   };
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch((e) => console.warn('Video play error:', e));
+    }
+  }, [cameraStream, showCamera]);
 
   useEffect(() => {
     if (user) {
@@ -73,22 +84,50 @@ export const UserModal = ({ isOpen, onClose, user, onSaved }) => {
 
   if (!isOpen) return null;
 
-  const startCamera = async () => {
+  const startCamera = async (overrideDevId = null) => {
     setError(null);
-    setShowCamera(true);
+    const targetDevId = overrideDevId !== null ? overrideDevId : selectedCameraId;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 480, height: 360, facingMode: 'user' },
-          audio: false
-        });
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevs = devices.filter((d) => d.kind === 'videoinput');
+          setAvailableCameras(videoDevs);
+        } catch (e) {
+          console.warn('No se pudieron listar dispositivos:', e);
+        }
+
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+        }
+
+        let stream = null;
+        try {
+          const constraints = {
+            video: targetDevId
+              ? { deviceId: { exact: targetDevId }, width: { ideal: 640 }, height: { ideal: 480 } }
+              : { width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+          };
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (errConstraint) {
+          console.warn('Reintentando cámara con restricciones mínimas:', errConstraint);
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+
         streamRef.current = stream;
+        setCameraStream(stream);
+        setShowCamera(true);
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
+          videoRef.current.play().catch((e) => console.warn('play error:', e));
         }
+      } else {
+        setError('Tu navegador no soporta acceso directo a la cámara.');
       }
     } catch (err) {
+      console.warn('Error accediendo a la cámara:', err);
       setError('No se pudo acceder a la cámara. Puedes subir una imagen desde archivo.');
       setShowCamera(false);
     }
@@ -306,28 +345,69 @@ export const UserModal = ({ isOpen, onClose, user, onSaved }) => {
             {/* Video stream para captura */}
             <canvas ref={canvasRef} style={{ display: 'none' }} />
             {showCamera && (
-              <div style={{ position: 'relative', width: '100%', height: '180px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '0.75rem' }}>
-                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <button
-                  type="button"
-                  onClick={capturePhoto}
-                  style={{
-                    position: 'absolute',
-                    bottom: '8px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    backgroundColor: '#2d6a4f',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '4px 12px',
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    fontWeight: '600'
-                  }}
-                >
-                  Capturar Foto
-                </button>
+              <div style={{ marginBottom: '0.75rem' }}>
+                {availableCameras.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <label style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>Cámara:</label>
+                    <select
+                      value={selectedCameraId}
+                      onChange={(e) => {
+                        const newId = e.target.value;
+                        setSelectedCameraId(newId);
+                        startCamera(newId);
+                      }}
+                      style={{
+                        flex: 1,
+                        fontSize: '0.72rem',
+                        padding: '0.25rem 0.4rem',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: 'white'
+                      }}
+                    >
+                      {availableCameras.map((cam, idx) => (
+                        <option key={cam.deviceId || idx} value={cam.deviceId}>
+                          {cam.label || `Cámara ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div style={{ position: 'relative', width: '100%', height: '180px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                  <video 
+                    ref={(el) => {
+                      videoRef.current = el;
+                      if (el && cameraStream && el.srcObject !== cameraStream) {
+                        el.srcObject = cameraStream;
+                        el.play().catch((e) => console.warn('play error:', e));
+                      }
+                    }} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                  <button
+                    type="button"
+                    onClick={capturePhoto}
+                    style={{
+                      position: 'absolute',
+                      bottom: '8px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: '#2d6a4f',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '4px 12px',
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Capturar Foto
+                  </button>
+                </div>
               </div>
             )}
 

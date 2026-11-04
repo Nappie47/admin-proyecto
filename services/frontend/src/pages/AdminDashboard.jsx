@@ -353,7 +353,7 @@ export const AdminDashboard = ({ initialTab, setActivePage }) => {
               cursor: 'pointer'
             }}
           >
-            Usuarios Internos (RF03)
+            Usuarios Internos
           </button>
         )}
       </div>

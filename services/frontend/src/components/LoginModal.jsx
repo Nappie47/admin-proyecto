@@ -19,6 +19,9 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
 
   // Facial Recognition state
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
   const [cameraError, setCameraError] = useState(null);
   const [facialSuccess, setFacialSuccess] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -34,6 +37,7 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    setCameraStream(null);
     setCameraActive(false);
   };
 
@@ -51,27 +55,62 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
     };
   }, [isOpen, activeTab]);
 
-  const startCamera = async () => {
+  // Sincronizar stream con el elemento video una vez montado
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch((e) => console.warn('Video play error:', e));
+    }
+  }, [cameraStream, cameraActive]);
+
+  const startCamera = async (overrideDeviceId = null) => {
     setCameraError(null);
     setError(null);
+    const targetDevId = overrideDeviceId !== null ? overrideDeviceId : selectedCameraId;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-          audio: false
-        });
+        // Enlistar cámaras disponibles (DroidCam, Webcams USB, etc.)
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevs = devices.filter((d) => d.kind === 'videoinput');
+          setAvailableCameras(videoDevs);
+        } catch (e) {
+          console.warn('No se pudieron listar dispositivos:', e);
+        }
+
+        // Detener stream previo
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+        }
+
+        let stream = null;
+        try {
+          const constraints = {
+            video: targetDevId
+              ? { deviceId: { exact: targetDevId }, width: { ideal: 640 }, height: { ideal: 480 } }
+              : { width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+          };
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (errConstraint) {
+          console.warn('Reintentando cámara con restricciones mínimas:', errConstraint);
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+
         streamRef.current = stream;
+        setCameraStream(stream);
+        setCameraActive(true);
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
+          videoRef.current.play().catch((e) => console.warn('play err:', e));
         }
-        setCameraActive(true);
       } else {
         setCameraError('Tu navegador no soporta acceso directo a la cámara web.');
       }
     } catch (err) {
       console.warn('Error accediendo a la cámara:', err);
-      setCameraError('No se pudo acceder a la cámara. Puedes subir una foto o usar usuario/contraseña.');
+      setCameraError('No se pudo acceder a la cámara. Revisa permisos o sube una fotografía.');
       setCameraActive(false);
     }
   };
@@ -271,6 +310,35 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
         {/* PESTAÑA: RECONOCIMIENTO FACIAL (IA) */}
         {activeTab === 'facial' && (
           <div>
+            {/* Selector de cámara si hay más de un dispositivo (ej. DroidCam + Webcam) */}
+            {availableCameras.length > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Cámara:</label>
+                <select
+                  value={selectedCameraId}
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    setSelectedCameraId(newId);
+                    startCamera(newId);
+                  }}
+                  style={{
+                    flex: 1,
+                    fontSize: '0.75rem',
+                    padding: '0.35rem 0.5rem',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: 'white'
+                  }}
+                >
+                  {availableCameras.map((cam, idx) => (
+                    <option key={cam.deviceId || idx} value={cam.deviceId}>
+                      {cam.label || `Cámara ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div style={{ 
               position: 'relative', 
               width: '100%', 
@@ -292,7 +360,13 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
               ) : cameraActive ? (
                 <>
                   <video 
-                    ref={videoRef} 
+                    ref={(el) => {
+                      videoRef.current = el;
+                      if (el && cameraStream && el.srcObject !== cameraStream) {
+                        el.srcObject = cameraStream;
+                        el.play().catch((e) => console.warn('play error:', e));
+                      }
+                    }} 
                     autoPlay 
                     playsInline 
                     muted 
