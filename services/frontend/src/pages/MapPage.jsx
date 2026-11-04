@@ -142,6 +142,65 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
     };
   }, [initialGraveId]);
 
+  // Suscripción WebSocket en tiempo real para actualizaciones automáticas del mapa
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+
+  useEffect(() => {
+    let ws = null;
+    let reconnectTimer = null;
+    let isMounted = true;
+
+    const connectWebSocket = () => {
+      try {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/map`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          if (isMounted) {
+            console.log('[WebSocket SIG] Conectado a canal en tiempo real.');
+            setRealtimeConnected(true);
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'map_updated') {
+              console.log('[WebSocket SIG] Actualización recibida. Recargando capas...', data);
+              loadPatios();
+              loadSepulturas();
+              loadMausoleos();
+            }
+          } catch (e) {
+            console.error('[WebSocket SIG] Error procesando mensaje:', e);
+          }
+        };
+
+        ws.onclose = () => {
+          if (isMounted) {
+            setRealtimeConnected(false);
+            reconnectTimer = setTimeout(connectWebSocket, 3000);
+          }
+        };
+
+        ws.onerror = () => {
+          ws?.close();
+        };
+      } catch (err) {
+        console.warn('[WebSocket SIG] No se pudo inicializar WebSocket:', err);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
+    };
+  }, []);
+
   const handleSelectGrave = (grave) => {
     setSelectedGrave(grave);
     setMapTarget([grave.latitud, grave.longitud]);
@@ -307,6 +366,12 @@ export const MapPage = ({ initialGraveId, initialPatioId, initialOpenEditor, set
 
         {/* Search bar, Capas & Editor toggle */}
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {realtimeConnected && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: '#16a34a', backgroundColor: '#dcfce7', padding: '4px 9px', borderRadius: '999px', fontWeight: '600' }} title="Sincronización en tiempo real vía WebSocket activa">
+              <span style={{ width: '6px', height: '6px', backgroundColor: '#16a34a', borderRadius: '50%', display: 'inline-block' }}></span>
+              En vivo (WebSocket)
+            </span>
+          )}
           <div style={{ position: 'relative', width: '240px' }}>
             <Search size={15} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
             <input
