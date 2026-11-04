@@ -1,11 +1,11 @@
 # ==============================================================================
-# PROYECTO INTEGRADOR - UNIDAD 2: ARQUITECTURA DE ALTA DISPONIBILIDAD EN GOOGLE CLOUD
+# PROYECTO INTEGRADOR - UNIDAD 2: ARQUITECTURA CLOUD EN GOOGLE CLOUD PLATFORM
 # Plataforma Web y SIG - Cementerio General Comuna de Los Ángeles
-# Licitación Mercado Público: 2411-8-LE25
 # Integrantes: Bryan Ahumada - Johan Muñoz
 # ==============================================================================
-# Nota: La persistencia relacional reside en Google Cloud SQL Regional (PostgreSQL 16)
-# y la entrada pública es gestionada por Google Cloud Application Load Balancer.
+# Servicios: 3 Contenedores por Máquina Virtual (Frontend Nginx, AI FastAPI, Backend Flask)
+# Balanceo Externo: Google Cloud External Application Load Balancer
+# Base de Datos: Google Cloud SQL Regional (PostgreSQL 16 + PostGIS)
 # ==============================================================================
 
 name: sig-cementerio-cloud
@@ -21,30 +21,8 @@ volumes:
 
 services:
   # ============================================================================
-  # CAPA 1: INGRESS / API GATEWAY (HAProxy L7 en Puerto 80)
-  # Recibe el tráfico desde Google Cloud Load Balancer y enruta a microservicios
-  # ============================================================================
-  gateway:
-    build:
-      context: ./services/gateway
-      dockerfile: Dockerfile
-    container_name: sig_gateway
-    restart: always
-    ports:
-      - "80:80"
-      - "8404:8404"
-    networks:
-      - cloud_net
-    depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-      ai_service:
-        condition: service_healthy
-
-  # ============================================================================
-  # CAPA 2: FRONTEND WEB (React SPA servido por Nginx en puerto 8080 interno)
+  # 1. FRONTEND WEB & REVERSE PROXY (Nginx en puerto 80 hacia internet)
+  # Sirve React y redirige internamente /api/ al backend y /api/ai/ al servicio facial
   # ============================================================================
   frontend:
     build:
@@ -52,17 +30,24 @@ services:
       dockerfile: Dockerfile
     container_name: sig_frontend
     restart: always
+    ports:
+      - "80:8080"
     networks:
       - cloud_net
+    depends_on:
+      backend:
+        condition: service_healthy
+      ai_service:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 5s
 
   # ============================================================================
-  # CAPA 2: MICROSERVICIO DE IA Y BIOMETRÍA FACIAL (FastAPI + OpenCV)
+  # 2. MICROSERVICIO DE IA Y BIOMETRÍA FACIAL (FastAPI + OpenCV)
   # ============================================================================
   ai_service:
     build:
@@ -85,7 +70,7 @@ services:
       start_period: 10s
 
   # ============================================================================
-  # CAPA 2: SERVIDOR API BACKEND (Flask + PostGIS conectado a Google Cloud SQL)
+  # 3. SERVIDOR API BACKEND (Flask + PostGIS conectado a Google Cloud SQL)
   # ============================================================================
   backend:
     build:
@@ -95,8 +80,8 @@ services:
     restart: always
     environment:
       - APP_ENV=production
-      - SECRET_KEY=${SECRET_KEY:-cementerio-los-angeles-secret-key-2026}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-cementerio-jwt-super-secret-key-2026}
+      - SECRET_KEY=${SECRET_KEY:-cementerio-los-angeles-secret-key-2026-prod}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-cementerio-jwt-super-secret-key-2026-prod}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT:-5432}/${DB_NAME:-cementerio_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
