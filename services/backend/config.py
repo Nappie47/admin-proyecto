@@ -23,10 +23,22 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=8)
     
     # Support PostgreSQL / PostGIS in Docker / GCP, with SQLite local dev fallback
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", 
-        f"sqlite:///{os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'cementerio.db'))}"
-    )
+    _db_user = os.getenv("DB_USER")
+    _db_password = os.getenv("DB_PASSWORD")
+    _db_host = os.getenv("DB_HOST")
+    _db_port = os.getenv("DB_PORT", "5432")
+    _db_name = os.getenv("DB_NAME", "cementerio_db")
+
+    if _db_host and _db_user and _db_password:
+        import urllib.parse
+        _safe_pass = urllib.parse.quote_plus(_db_password)
+        _safe_user = urllib.parse.quote_plus(_db_user)
+        SQLALCHEMY_DATABASE_URI = f"postgresql://{_safe_user}:{_safe_pass}@{_db_host}:{_db_port}/{_db_name}?sslmode=prefer"
+    else:
+        SQLALCHEMY_DATABASE_URI = os.getenv(
+            "DATABASE_URL", 
+            f"sqlite:///{os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'cementerio.db'))}"
+        )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,

@@ -10,7 +10,7 @@ import time
 import psycopg2
 
 user = os.getenv("DB_USER", "postgres")
-password = os.getenv("DB_PASSWORD", "Cementerio2026Secure!")
+password = os.getenv("DB_PASSWORD", "")
 host = os.getenv("DB_HOST", "10.238.240.3")
 port = int(os.getenv("DB_PORT", "5432"))
 dbname = os.getenv("DB_NAME", "cementerio_db")

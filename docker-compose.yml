@@ -82,7 +82,6 @@ services:
       - APP_ENV=production
       - SECRET_KEY=${SECRET_KEY:-cementerio-los-angeles-secret-key-2026-prod}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-cementerio-jwt-super-secret-key-2026-prod}
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT:-5432}/${DB_NAME:-cementerio_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=${DB_HOST}
