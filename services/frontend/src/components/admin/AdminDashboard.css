@@ -174,3 +174,20 @@
   }
 }
 
+@media (max-width: 600px) {
+  .admin-filters-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .admin-filters-grid > div:first-child {
+    grid-column: span 1 !important;
+  }
+  .admin-tab-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-tab-toolbar button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

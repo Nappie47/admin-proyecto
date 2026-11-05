@@ -120,7 +120,7 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
           </div>
 
           {/* Attributes Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem', fontSize: '0.88rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem', fontSize: '0.88rem' }}>
             <div>
               <span style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>Patio</span>
               <span style={{ fontWeight: '700', color: '#1e293b' }}>Patio {grave.patio_numero} ({grave.patio_nombre || 'General'})</span>
@@ -157,7 +157,7 @@ export const GraveDetailPage = ({ graveId, setActivePage }) => {
           </div>
 
           {/* Ubicación y Registro */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.84rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', fontSize: '0.84rem' }}>
             <div>
               <span style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>Ubicación</span>
               <span style={{ fontWeight: '600', color: '#334155' }}>{grave.ubicacion_detalle}</span>

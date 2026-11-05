@@ -1,4 +1,4 @@
-/* Map Page Modular Styles */
+/* Map Page Modular & Responsive Styles */
 
 .map-page-header {
   background-color: white;
@@ -40,45 +40,67 @@
 /* Floating Map Legend */
 .map-legend-box {
   position: absolute;
-  bottom: clamp(12px, 2vw, 24px);
-  left: clamp(12px, 2vw, 24px);
+  bottom: 24px;
+  left: 24px;
   background-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
   border-radius: 12px;
   padding: 0.85rem 1rem;
   border: 1px solid #e2e8f0;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  width: min(210px, calc(100vw - 24px));
+  z-index: 950;
+  width: 200px;
   font-size: 0.78rem;
+  transition: all 0.2s ease;
+}
+
+.map-legend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
 }
 
 .map-legend-title {
   font-weight: 700;
   color: #0f2d1e;
-  margin-bottom: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  font-size: 0.75rem;
+}
+
+.map-legend-toggle-icon {
+  display: none;
+  color: #64748b;
 }
 
 .map-legend-list {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  margin-top: 0.6rem;
 }
 
 .map-legend-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #334155;
 }
 
 /* Slide-out Drawers */
 .map-drawer-panel {
   position: absolute;
-  right: clamp(8px, 2vw, 24px);
-  top: clamp(8px, 2vw, 24px);
-  bottom: clamp(8px, 2vw, 24px);
+  right: 24px;
+  top: 24px;
+  bottom: 24px;
+  width: 360px;
   background-color: white;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
@@ -130,3 +152,110 @@
   gap: 0.8rem;
 }
 
+/* ==========================================================================
+   Responsive Adaptations for Tablets & Mobile Phones
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .map-page-header {
+    padding: 0.6rem 0.85rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .map-page-title-badge {
+    display: none;
+  }
+
+  .map-page-title {
+    font-size: 1.05rem !important;
+  }
+
+  .map-page-toolbar {
+    width: 100%;
+    gap: 0.4rem !important;
+  }
+
+  .map-page-toolbar > div:first-child {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  /* Compact Collapsible Floating Legend on Mobile */
+  .map-legend-box {
+    bottom: 12px !important;
+    left: 12px !important;
+    top: auto !important;
+    right: auto !important;
+    padding: 6px 10px !important;
+    border-radius: 20px !important;
+    width: auto !important;
+    max-width: calc(100vw - 24px) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .map-legend-toggle-icon {
+    display: inline-flex !important;
+    align-items: center;
+  }
+
+  .map-legend-box.collapsed .map-legend-list {
+    display: none !important;
+  }
+
+  .map-legend-box.expanded {
+    border-radius: 14px !important;
+    padding: 10px 12px !important;
+    width: 200px !important;
+  }
+
+  .map-legend-box.expanded .map-legend-list {
+    display: flex !important;
+  }
+
+  /* Bottom-Sheet Drawers for Mobile (leaves top map visible) */
+  .map-drawer-panel {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-height: 54vh !important;
+    border-radius: 20px 20px 0 0 !important;
+    border-bottom: none !important;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.22) !important;
+    z-index: 1050 !important;
+  }
+
+  .map-drawer-header {
+    padding: 0.85rem 1rem !important;
+  }
+
+  .map-drawer-body {
+    padding: 1rem !important;
+  }
+
+  .map-drawer-footer {
+    padding: 0.75rem 1rem !important;
+  }
+
+  /* Layers dropdown positioning */
+  .map-layers-menu {
+    right: -20px !important;
+    width: min(280px, calc(100vw - 24px)) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .map-page-title {
+    font-size: 0.95rem !important;
+  }
+
+  .btn-primary, .btn-secondary {
+    font-size: 0.78rem !important;
+    padding: 0.45rem 0.75rem !important;
+  }
+
+  .map-drawer-panel {
+    max-height: 60vh !important;
+  }
+}

@@ -10,7 +10,7 @@ export const GraveDetailDrawer = ({
   if (!grave) return null;
 
   return (
-    <div className="map-drawer-panel" style={{ width: 'min(350px, calc(100vw - 16px))' }}>
+    <div className="map-drawer-panel">
       {/* Drawer Header */}
       <div className="map-drawer-header" style={{ padding: '1.25rem', alignItems: 'flex-start' }}>
         <div>

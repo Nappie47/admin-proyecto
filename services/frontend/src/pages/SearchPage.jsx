@@ -298,11 +298,11 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
                   {isOcupada ? '✝' : 'O'}
                 </div>
 
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                     <h3 
                       onClick={() => setActivePage({ name: 'detail', id: sep.id })}
-                      style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f2d1e', cursor: 'pointer' }}
+                      style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f2d1e', cursor: 'pointer', wordBreak: 'break-word' }}
                     >
                       {isOcupada ? sep.nombre_completo : `Sepultura Disponible #${sep.numero}`}
                     </h3>
@@ -312,7 +312,7 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
                   </div>
 
                   {isOcupada && (
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.82rem', color: '#64748b', marginTop: '0.25rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.82rem', color: '#64748b', marginTop: '0.25rem', flexWrap: 'wrap' }}>
                       {fNac && <span>★ {fNac}</span>}
                       {fFal && <span>✝ {fFal}</span>}
                     </div>
@@ -321,7 +321,7 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
               </div>
 
               {/* Middle Column: Metadata Pills matching Slide 7 */}
-              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>Patio</div>
                   <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e293b' }}>{sep.patio_numero}</div>
@@ -339,7 +339,7 @@ export const SearchPage = ({ initialQuery, setActivePage }) => {
               </div>
 
               {/* Right Action Button */}
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => setActivePage({ name: 'map', selectedGraveId: sep.id })}
                   className="btn-secondary"

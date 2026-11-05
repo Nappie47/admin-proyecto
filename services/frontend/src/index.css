@@ -652,13 +652,6 @@ body {
     padding: 0.7rem 0.85rem !important;
   }
 
-  .map-stage > div:last-of-type {
-    right: 0.5rem !important;
-    top: 0.5rem !important;
-    bottom: 0.5rem !important;
-    width: min(360px, calc(100vw - 1rem)) !important;
-  }
-
   /* Responsive tables & cards across all views */
   table {
     min-width: 580px;

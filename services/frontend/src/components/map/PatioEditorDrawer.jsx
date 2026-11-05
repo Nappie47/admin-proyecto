@@ -22,7 +22,7 @@ export const PatioEditorDrawer = ({
   if (!isOpen) return null;
 
   return (
-    <div className="map-drawer-panel" style={{ width: 'min(380px, calc(100vw - 16px))' }}>
+    <div className="map-drawer-panel">
       {/* Editor Header */}
       <div className="map-drawer-header">
         <div>
