@@ -1,0 +1,73 @@
+# ============================================================
+# Dockerfile API - Hardened para Cloud Run
+# Multi-stage build con imagen base distroless/alpine
+# ============================================================
+
+# ============================================================
+# STAGE 1: Builder - Compilar dependencias
+# ============================================================
+FROM python:3.11-alpine AS builder
+
+# Instalar dependencias de build
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    libffi-dev \
+    openssl-dev \
+    cargo \
+    postgresql-dev
+
+# Crear usuario no-root para build
+RUN addgroup -g 1000 -S appgroup && \
+    adduser -u 1000 -S appuser -G appgroup
+
+WORKDIR /app
+
+# Copiar requirements primero (cache layer)
+COPY requirements.txt .
+
+# Instalar dependencias Python en directorio virtual
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# ============================================================
+# STAGE 2: Runtime - Imagen mínima distroless
+# ============================================================
+FROM gcr.io/distroless/python3-debian12:nonroot
+
+# Metadata
+LABEL maintainer="Equipo Unidad 3 - Administración de Redes" \
+      version="1.0.0" \
+      description="API Service - Hardened para Cloud Run" \
+      org.opencontainers.image.source="https://github.com/tu-org/tu-repo" \
+      org.opencontainers.image.documentation="https://github.com/tu-org/tu-repo/blob/main/docs/seguridad-u3.md" \
+      org.opencontainers.image.licenses="MIT"
+
+# Copiar virtualenv del builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copiar código de la aplicación
+COPY --chown=nonroot:nonroot app/ /app/
+
+WORKDIR /app
+
+# Variables de entorno
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ENVIRONMENT=production
+
+# Puerto (Cloud Run usa 8080 por defecto)
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+
+# Usuario no-root (ya viene en distroless nonroot)
+USER nonroot:nonroot
+
+# Comando de inicio
+ENTRYPOINT ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

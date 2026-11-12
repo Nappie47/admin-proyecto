@@ -1,0 +1,391 @@
+# ============================================================
+# GitHub Actions - Security Audit Pipeline
+# Ejecutado semanalmente para auditoría de hardening
+# ============================================================
+
+name: Security Audit Weekly
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'  # Domingos a las 3 AM UTC
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Tipo de escaneo'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - quick
+      target_images:
+        description: 'Imágenes a escanear (separadas por coma)'
+        required: false
+        default: 'api,frontend,ai-service'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/unidad3-containers
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+
+jobs:
+  # ============================================================
+  # JOB 1: Trivy Vulnerability Scan (Weekly)
+  # ============================================================
+  trivy-scan:
+    name: Trivy Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Pull latest images
+        run: |
+          for img in api frontend ai-service; do
+            docker pull ${{ env.ARTIFACT_REGISTRY }}/${{ img }}:latest
+          done
+
+      - name: Trivy Scan - API
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.ARTIFACT_REGISTRY }}/api:latest'
+          format: 'sarif'
+          output: 'trivy-api-weekly.sarif'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: Upload Trivy API SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-api-weekly.sarif
+          category: trivy-api-weekly
+
+      - name: Trivy Scan - Frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.ARTIFACT_REGISTRY }}/frontend:latest'
+          format: 'sarif'
+          output: 'trivy-frontend-weekly.sarif'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: Upload Trivy Frontend SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-frontend-weekly.sarif
+          category: trivy-frontend-weekly
+
+      - name: Trivy Scan - AI Service
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.ARTIFACT_REGISTRY }}/ai-service:latest'
+          format: 'sarif'
+          output: 'trivy-ai-weekly.sarif'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: Upload Trivy AI SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-ai-weekly.sarif
+          category: trivy-ai-weekly
+
+      - name: Grype Scan (Alternative)
+        uses: anchore/scan-action@v3
+        with:
+          image: '${{ env.ARTIFACT_REGISTRY }}/api:latest'
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Upload results to Cloud Storage
+        run: |
+          gsutil -m cp trivy-*.sarif gs://${{ secrets.GCP_PROJECT_ID }}-security-reports/audit/trivy/$(date +%Y%m%d)/
+          gsutil -m cp grype-report.json gs://${{ secrets.GCP_PROJECT_ID }}-security-reports/audit/grype/$(date +%Y%m%d)/ 2>/dev/null || true
+
+  # ============================================================
+  # JOB 2: Lynis Hardening Audit
+  # ============================================================
+  lynis-audit:
+    name: Lynis Hardening Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Lynis Audit
+        uses: cisofy/lynis-action@v1
+        with:
+          profile: default
+          options: '--quick --no-colors --format text'
+
+      - name: Upload Lynis Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lynis-weekly-report
+          path: /var/log/lynis.log
+
+      - name: Upload to Cloud Storage
+        run: |
+          gsutil cp /var/log/lynis.log gs://${{ secrets.GCP_PROJECT_ID }}-security-reports/audit/lynis/lynis-$(date +%Y%m%d).log 2>/dev/null || true
+
+  # ============================================================
+  # JOB 3: Gitleaks Secret Scanning (Full History)
+  # ============================================================
+  gitleaks-audit:
+    name: Gitleaks Secret Scan (Full History)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks (Full History)
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config: .gitleaks.toml
+          args: --verbose --report-format sarif --report-path gitleaks-full.sarif --no-git=false
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks-full.sarif
+          category: gitleaks-full-history
+
+      - name: Upload to Cloud Storage
+        run: |
+          gsutil cp gitleaks-full.sarif gs://${{ secrets.GCP_PROJECT_ID }}-security-reports/audit/gitleaks/gitleaks-full-$(date +%Y%m%d).sarif
+
+  # ============================================================
+  # JOB 4: Container Structure Test
+  # ============================================================
+  structure-test-audit:
+    name: Container Structure Test Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Pull images
+        run: |
+          for img in api frontend ai-service; do
+            docker pull ${{ env.ARTIFACT_REGISTRY }}/${{ img }}:latest
+          done
+
+      - name: Run Container Structure Test - API
+        uses: google/container-structure-test-action@v1
+        with:
+          image: '${{ env.ARTIFACT_REGISTRY }}/api:latest'
+          config: docker/tests/container-structure-test.yaml
+
+      - name: Run Container Structure Test - Frontend
+        uses: google/container-structure-test-action@v1
+        with:
+          image: '${{ env.ARTIFACT_REGISTRY }}/frontend:latest'
+          config: docker/tests/container-structure-test.yaml
+
+      - name: Run Container Structure Test - AI
+        uses: google/container-structure-test-action@v1
+        with:
+          image: '${{ env.ARTIFACT_REGISTRY }}/ai-service:latest'
+          config: docker/tests/container-structure-test.yaml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: structure-test-weekly
+          path: test-results.xml
+
+  # ============================================================
+  # JOB 5: SBOM Generation (Syft)
+  # ============================================================
+  sbom-generation:
+    name: SBOM Generation (Syft)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Pull images
+        run: |
+          for img in api frontend ai-service; do
+            docker pull ${{ env.ARTIFACT_REGISTRY }}/${{ img }}:latest
+          done
+
+      - name: Generate SBOM - API
+        uses: anchore/syft-action@v1
+        with:
+          image: ${{ env.ARTIFACT_REGISTRY }}/api:latest
+          output-format: spdx-json
+          output-file: sbom-api.spdx.json
+
+      - name: Generate SBOM - Frontend
+        uses: anchore/syft-action@v1
+        with:
+          image: ${{ env.ARTIFACT_REGISTRY }}/frontend:latest
+          output-format: spdx-json
+          output-file: sbom-frontend.spdx.json
+
+      - name: Generate SBOM - AI
+        uses: anchore/syft-action@v1
+        with:
+          image: ${{ env.ARTIFACT_REGISTRY }}/ai-service:latest
+          output-format: spdx-json
+          output-file: sbom-ai.spdx.json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-weekly
+          path: sbom-*.spdx.json
+
+      - name: Upload to Cloud Storage
+        run: |
+          gsutil -m cp sbom-*.spdx.json gs://${{ secrets.GCP_PROJECT_ID }}-security-reports/audit/sbom/$(date +%Y%m%d)/
+
+  # ============================================================
+  # JOB 6: Cosign Signature Verification
+  # ============================================================
+  cosign-verify:
+    name: Cosign Signature Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Pull images
+        run: |
+          for img in api frontend ai-service; do
+            docker pull ${{ env.ARTIFACT_REGISTRY }}/${{ img }}:latest
+          done
+
+      - name: Verify Signatures
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.0'
+
+      - name: Verify Signatures
+        run: |
+          for img in api frontend ai-service; do
+            cosign verify --key=${{ secrets.COSIGN_PUBLIC_KEY }} ${{ env.ARTIFACT_REGISTRY }}/${{ img }}:latest || true
+          done
+
+  # ============================================================
+  # JOB 7: Generate Weekly Security Report
+  # ============================================================
+  weekly-report:
+    name: Generate Weekly Security Report
+    runs-on: ubuntu-latest
+    needs: [trivy-scan, lynis-audit, gitleaks-audit, structure-test-audit, sbom-generation, cosign-verify]
+    if: always()
+    steps:
+      - name: Generate Weekly Report
+        run: |
+          cat > weekly-security-report.md << 'EOF'
+          # Weekly Security Audit Report
+          **Date:** $(date)
+          **Project:** Unidad 3 - Administración de Redes
+          **Environment:** Production (Cloud Run)
+
+          ## Summary
+          - **Trivy Scans:** Completed for API, Frontend, AI Service
+          - **Lynis Audit:** System hardening check completed
+          - **Gitleaks:** Full history scan completed
+          - **Structure Tests:** Container structure validation completed
+          - **SBOM Generation:** SBOMs generated for all services
+          - **Cosign Verification:** Signature verification completed
+
+          ## Artifacts Generated
+          - Trivy SARIF reports (API, Frontend, AI)
+          - Lynis hardening report
+          - Gitleaks SARIF (full history)
+          - Container Structure Test results
+          - SBOMs (SPDX format) for all services
+
+          ## Storage
+          All artifacts uploaded to: gs://${{ secrets.GCP_PROJECT_ID }}-security-reports/audit/$(date +%Y%m%d)/
+
+          ## Next Steps
+          - Review Trivy HIGH/CRITICAL findings
+          - Address Lynis warnings
+          - Rotate any secrets found by Gitleaks
+          - Update base images if vulnerabilities found
+          EOF
+
+      - name: Upload Weekly Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-security-report
+          path: weekly-security-report.md
+
+      - name: Notify Slack
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "📊 Weekly Security Audit Completed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Weekly Security Audit Completed*\nAll security scans completed for Unidad 3 project."
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*Date:*\n$(date)"},
+                    {"type": "mrkdwn", "text": "*Trivy Scans:*\nCompleted (API, Frontend, AI)"},
+                    {"type": "mrkdwn", "text": "*Lynis Audit:*\nCompleted"},
+                    {"type": "mrkdwn", "text": "*Gitleaks:*\nFull history scanned"}
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

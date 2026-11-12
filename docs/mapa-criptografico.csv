@@ -1,0 +1,11 @@
+Uso,Algoritmo/Mecanismo,Tipo,Llave Generación/Almacenamiento,Renovación
+TLS/HTTPS (Load Balancer),TLS 1.3 AES_256_GCM,Simétrica (sesión) / Asimétrica (certificado),Google-managed SSL / Let's Encrypt,Auto (90 días)
+Workload Identity / OIDC,OIDC / mTLS,Asimétrica,Google-managed / Service Account keys,Auto (rotación SA keys)
+Secret Manager,AES-256-GCM,Simétrica,Google-managed / CMEK (Cloud KMS),Configurable (30 días)
+Cloud SQL (CMEK),AES-256,Simétrica,Cloud KMS CryptoKey,Rotación automática KMS (30 días)
+Cloud Storage (CMEK),AES-256,Simétrica,Cloud KMS CryptoKey,Rotación automática KMS
+Contraseñas BD,Argon2id,Hash,Generado en app, almacenado hash,Re-hash en login
+JWT/Session tokens,RS256 / HS256,Asimétrica/Simétrica,Cloud KMS / Secret Manager,Rotación 24h-7d
+Envelope Encryption (PII),AES-256-GCM + KMS,Híbrida,DEK en app, KEK en Cloud KMS,Rotación KEK anual
+Cloud Armor WAF (firmas),HMAC-SHA256,Simétrica,Google-managed,Auto
+Cloud Build (firmas imágenes),Cosign/Rekor,Asimétrica,Cosign keys / Rekor transparency log,Rotación 90 días

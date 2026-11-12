@@ -1,0 +1,191 @@
+# Cloud Build Configuration - Main Build Pipeline
+# Generado automáticamente por Terraform
+
+steps:
+# ============================================================
+# PASO 1: Verificar código y dependencias
+# ============================================================
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-api'
+  args: [
+    'build',
+    '-t', '${_ARTIFACT_REGISTRY}/api:$COMMIT_SHA',
+    '-t', '${_ARTIFACT_REGISTRY}/api:latest',
+    '-f', 'docker/Dockerfile.api',
+    '.'
+  ]
+  dir: '.'
+
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-frontend'
+  args: [
+    'build',
+    '-t', '${_ARTIFACT_REGISTRY}/frontend:$COMMIT_SHA',
+    '-t', '${_ARTIFACT_REGISTRY}/frontend:latest',
+    '-f', 'docker/Dockerfile.frontend',
+    '.'
+  ]
+  dir: '.'
+
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-ai-service'
+  args: [
+    'build',
+    '-t', '${_ARTIFACT_REGISTRY}/ai-service:$COMMIT_SHA',
+    '-t', '${_ARTIFACT_REGISTRY}/ai-service:latest',
+    '-f', 'docker/Dockerfile.ai',
+    '.'
+  ]
+  dir: '.'
+
+# ============================================================
+# PASO 2: Security Scanning (Trivy)
+# ============================================================
+- name: 'aquasec/trivy:latest'
+  id: 'trivy-scan-api'
+  args: [
+    'image',
+    '--severity', 'HIGH,CRITICAL',
+    '--format', 'sarif',
+    '--output', '/workspace/trivy-api.sarif',
+    '${_ARTIFACT_REGISTRY}/api:$COMMIT_SHA'
+  ]
+  env:
+    - 'TRIVY_DB_REPOSITORY=public.ecr.aws/aquasecurity/trivy-db:2'
+
+- name: 'gcr.io/cloud-builders/gsutil'
+  id: 'upload-trivy-api'
+  args: ['cp', 'trivy-api.sarif', 'gs://${PROJECT_ID}-security-reports/trivy/api-$COMMIT_SHA.sarif']
+
+- name: 'aquasec/trivy:latest'
+  id: 'trivy-scan-frontend'
+  args: [
+    'image',
+    '--severity', 'HIGH,CRITICAL',
+    '--format', 'sarif',
+    '--output', '/workspace/trivy-frontend.sarif',
+    '${_ARTIFACT_REGISTRY}/frontend:$COMMIT_SHA'
+  ]
+
+- name: 'gcr.io/cloud-builders/gsutil'
+  id: 'upload-trivy-frontend'
+  args: ['cp', 'trivy-frontend.sarif', 'gs://${PROJECT_ID}-security-reports/trivy/frontend-$COMMIT_SHA.sarif']
+
+- name: 'aquasec/trivy:latest'
+  id: 'trivy-scan-ai'
+  args: [
+    'image',
+    '--severity', 'HIGH,CRITICAL',
+    '--format', 'sarif',
+    '--output', '/workspace/trivy-ai.sarif',
+    '${_ARTIFACT_REGISTRY}/ai-service:$COMMIT_SHA'
+  ]
+
+- name: 'gcr.io/cloud-builders/gsutil'
+  id: 'upload-trivy-ai'
+  args: ['cp', 'trivy-ai.sarif', 'gs://${PROJECT_ID}-security-reports/trivy/ai-$COMMIT_SHA.sarif']
+
+# ============================================================
+# PASO 3: Gitleaks Secret Scanning
+# ============================================================
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'gitleaks-scan'
+  args: [
+    'run', '--rm',
+    '-v', '${PWD}:/src',
+    'zricethezav/gitleaks:latest',
+    'detect',
+    '--source', '/src',
+    '--report-format', 'sarif',
+    '--report-path', '/src/gitleaks-report.sarif',
+    '--verbose'
+  ]
+  env:
+    - 'GITHUB_TOKEN=${_GITHUB_TOKEN}'
+
+- name: 'gcr.io/cloud-builders/gsutil'
+  id: 'upload-gitleaks'
+  args: ['cp', 'gitleaks-report.sarif', 'gs://${PROJECT_ID}-security-reports/gitleaks/gitleaks-$COMMIT_SHA.sarif']
+
+# ============================================================
+# PASO 4: Push Images to Artifact Registry
+# ============================================================
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'push-api'
+  args: ['push', '${_ARTIFACT_REGISTRY}/api:$COMMIT_SHA']
+
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'push-frontend'
+  args: ['push', '${_ARTIFACT_REGISTRY}/frontend:$COMMIT_SHA']
+
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'push-ai'
+  args: ['push', '${_ARTIFACT_REGISTRY}/ai-service:$COMMIT_SHA']
+
+# ============================================================
+# PASO 5: Deploy to Cloud Run (solo si pasa security scans)
+# ============================================================
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-api'
+  entrypoint: 'gcloud'
+  args: [
+    'run', 'deploy', '${_SERVICE_NAME_API}',
+    '--image', '${_ARTIFACT_REGISTRY}/api:$COMMIT_SHA',
+    '--region', '${_REGION}',
+    '--platform', 'managed',
+    '--allow-unauthenticated',
+    '--quiet'
+  ]
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-frontend'
+  entrypoint: 'gcloud'
+  args: [
+    'run', 'deploy', '${_SERVICE_NAME_FRONTEND}',
+    '--image', '${_ARTIFACT_REGISTRY}/frontend:$COMMIT_SHA',
+    '--region', '${_REGION}',
+    '--platform', 'managed',
+    '--allow-unauthenticated',
+    '--quiet'
+  ]
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-ai'
+  entrypoint: 'gcloud'
+  args: [
+    'run', 'deploy', '${_SERVICE_NAME_AI}',
+    '--image', '${_ARTIFACT_REGISTRY}/ai-service:$COMMIT_SHA',
+    '--region', '${_REGION}',
+    '--platform', 'managed',
+    '--quiet'
+  ]
+
+# ============================================================
+# PASO 5: Notificación (Slack/Email)
+# ============================================================
+- name: 'gcr.io/cloud-builders/curl'
+  id: 'notify-success'
+  args: [
+    '-X', 'POST',
+    '-H', 'Content-Type: application/json',
+    '-d', '{"text":"✅ Build y Deploy exitoso para commit $COMMIT_SHA"}',
+    '${_SLACK_WEBHOOK_URL}'
+  ]
+
+# Configuración de sustituciones
+substitutions:
+  _ARTIFACT_REGISTRY: '${artifact_registry}'
+  _REGION: '${region}'
+  _SERVICE_NAME_API: '${project_name}-api-${suffix}'
+  _SERVICE_NAME_FRONTEND: '${project_name}-frontend-${suffix}'
+  _SERVICE_NAME_AI: '${project_name}-ai-service-${suffix}'
+  _SLACK_WEBHOOK_URL: '${_SLACK_WEBHOOK_URL}'
+  _GITHUB_TOKEN: '${_GITHUB_TOKEN}'
+
+# Timeout
+timeout: '3600s'
+
+# Opciones
+options:
+  logging: CLOUD_LOGGING_ONLY
+  default_logs_bucket_behavior: REGIONAL_USER_OWNED_BUCKET

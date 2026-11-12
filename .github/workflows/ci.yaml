@@ -1,0 +1,497 @@
+# ============================================================
+# GitHub Actions - CI Pipeline
+# Build, Security Scan, Test, Deploy to Cloud Run
+# ============================================================
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/unidad3-containers
+  SERVICE_NAME_API: unidad3-api
+  SERVICE_NAME_FRONTEND: unidad3-frontend
+  SERVICE_NAME_AI: unidad3-ai-service
+
+jobs:
+  # ============================================================
+  # JOB 1: Lint & Static Analysis
+  # ============================================================
+  lint:
+    name: Lint & Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for gitleaks
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black isort mypy bandit
+
+      - name: Run Black (formatter check)
+        run: black --check --diff .
+
+      - name: Run isort (import sorting check)
+        run: isort --check-only --diff .
+
+      - name: Run flake8 (linting)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run mypy (type checking)
+        run: mypy --ignore-missing-imports .
+
+      - name: Run bandit (security linting)
+        run: bandit -r . -f json -o bandit-report.json || true
+
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ============================================================
+  # JOB 2: Secret Scanning (Gitleaks)
+  # ============================================================
+  secret-scan:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config: .gitleaks.toml
+          args: --verbose --report-format sarif --report-path gitleaks.sarif
+
+      - name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+      - name: Upload Gitleaks report as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+
+  # ============================================================
+  # JOB 3: Unit Tests
+  # ============================================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-mock
+
+      - name: Run tests
+        run: |
+          pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ============================================================
+  # JOB 4: Build & Security Scan Docker Images
+  # ============================================================
+  build-and-scan:
+    name: Build & Security Scan
+    runs-on: ubuntu-latest
+    needs: [lint, secret-scan, test]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build API Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.api
+          push: false
+          tags: ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }},${{ env.ARTIFACT_REGISTRY }}/api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: false
+          tags: ${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }},${{ env.ARTIFACT_REGISTRY }}/frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build AI Service Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.ai
+          push: false
+          tags: ${{ env.ARTIFACT_REGISTRY }}/ai-service:${{ github.sha }},${{ env.ARTIFACT_REGISTRY }}/ai-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-api.sarif'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-api.sarif
+          category: trivy-api
+
+      - name: Trivy Scan Frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-frontend.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy Frontend SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: trivy-frontend
+
+      - name: Trivy Scan AI Service
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.ARTIFACT_REGISTRY }}/ai-service:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-ai.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy AI SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-ai.sarif
+          category: trivy-ai
+
+      - name: Run Grype Scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          fail-build: true
+          severity-cutoff: high
+
+      - name: Generate SBOM (Syft)
+        uses: anchore/syft-action@v1
+        with:
+          image: ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          output-format: spdx-json
+          output-file: sbom-api.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-api
+          path: sbom-api.spdx.json
+
+  # ============================================================
+  # JOB 5: Container Structure Test
+  # ============================================================
+  structure-test:
+    name: Container Structure Test
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Container Structure Test
+        uses: google/container-structure-test-action@v1
+        with:
+          image: ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          config: docker/tests/container-structure-test.yaml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-structure-test
+          path: test-results.xml
+
+  # ============================================================
+  # JOB 6: Deploy to Cloud Run (Staging)
+  # ============================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-and-scan, structure-test]
+    if: github.ref == 'refs/heads/develop'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Push Images to Artifact Registry
+        run: |
+          docker push ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/ai-service:${{ github.sha }}
+
+      - name: Deploy API to Cloud Run (Staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME_API }}-staging
+          image: ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: >
+            --service-account=${{ secrets.CLOUD_RUN_SA_EMAIL }}
+            --vpc-connector=unidad3-vpc-connector
+            --vpc-egress=all-traffic
+            --min-instances=0
+            --max-instances=5
+            --cpu=500m
+            --memory=256Mi
+            --concurrency=50
+            --set-env-vars=ENVIRONMENT=staging
+            --set-secrets=DB_PASSWORD=unidad3-db-password:latest,JWT_SECRET=unidad3-jwt-secret:latest
+            --ingress=internal
+            --execution-environment=gen2
+            --labels=environment=staging,managed-by=github-actions
+
+      - name: Deploy Frontend to Cloud Run (Staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME_FRONTEND }}-staging
+          image: ${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: >
+            --service-account=${{ secrets.CLOUD_RUN_SA_EMAIL }}
+            --vpc-connector=unidad3-vpc-connector
+            --vpc-egress=all-traffic
+            --min-instances=0
+            --max-instances=5
+            --cpu=250m
+            --memory=128Mi
+            --concurrency=50
+            --ingress=internal
+            --execution-environment=gen2
+            --labels=environment=staging,managed-by=github-actions
+
+      - name: Health Check Staging
+        run: |
+          sleep 30
+          curl -f https://${{ env.SERVICE_NAME_API }}-staging-${{ secrets.GCP_PROJECT_ID }}.run.app/health || exit 1
+          curl -f https://${{ env.SERVICE_NAME_FRONTEND }}-staging-${{ secrets.GCP_PROJECT_ID }}.run.app/health || exit 1
+
+  # ============================================================
+  # JOB 7: Deploy to Production
+  # ============================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-scan, structure-test]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Push Images
+        run: |
+          docker push ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/ai-service:${{ github.sha }}
+
+      - name: Deploy API to Cloud Run (Production)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME_API }}
+          image: ${{ env.ARTIFACT_REGISTRY }}/api:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: >
+            --service-account=${{ secrets.CLOUD_RUN_SA_EMAIL }}
+            --vpc-connector=unidad3-vpc-connector
+            --vpc-egress=all-traffic
+            --min-instances=1
+            --max-instances=20
+            --cpu=1000m
+            --memory=512Mi
+            --concurrency=80
+            --set-env-vars=ENVIRONMENT=production
+            --set-secrets=DB_PASSWORD=unidad3-db-password:latest,JWT_SECRET=unidad3-jwt-secret:latest,REDIS_PASSWORD=unidad3-redis-password:latest
+            --ingress=internal
+            --execution-environment=gen2
+            --labels=environment=production,managed-by=github-actions,version=${{ github.sha }}
+
+      - name: Deploy Frontend (Production)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME_FRONTEND }}
+          image: ${{ env.ARTIFACT_REGISTRY }}/frontend:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: >
+            --service-account=${{ secrets.CLOUD_RUN_SA_EMAIL }}
+            --vpc-connector=unidad3-vpc-connector
+            --vpc-egress=all-traffic
+            --min-instances=1
+            --max-instances=10
+            --cpu=500m
+            --memory=256Mi
+            --concurrency=80
+            --ingress=internal
+            --execution-environment=gen2
+            --labels=environment=production,managed-by=github-actions
+
+      - name: Deploy AI Service (Production)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME_AI }}
+          image: ${{ env.ARTIFACT_REGISTRY }}/ai-service:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: >
+            --service-account=${{ secrets.CLOUD_RUN_SA_EMAIL }}
+            --vpc-connector=unidad3-vpc-connector
+            --vpc-egress=all-traffic
+            --min-instances=0
+            --max-instances=3
+            --cpu=2000m
+            --memory=2Gi
+            --concurrency=10
+            --ingress=internal
+            --execution-environment=gen2
+            --labels=environment=production,managed-by=github-actions
+
+      - name: Health Checks Production
+        run: |
+          sleep 30
+          curl -f https://api.tu-dominio.com/health || exit 1
+          curl -f https://tu-dominio.com/health || exit 1
+
+      - name: Run testssl.sh against Production
+        run: |
+          docker run --rm drwetter/testssl.sh:latest --jsonfile testssl-prod.json https://api.tu-dominio.com
+        continue-on-error: true
+
+      - name: Upload testssl results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testssl-production
+          path: testssl-prod.json
+
+  # ============================================================
+  # JOB 8: Notify
+  # ============================================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    steps:
+      - name: Send Slack Notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "CI/CD Pipeline ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*CI/CD Pipeline ${{ job.status }}* for ${{ github.repository }}@${{ github.sha }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*Branch:*\n${{ github.ref_name }}"},
+                    {"type": "mrkdwn", "text": "*Commit:*\n${{ github.sha }}"},
+                    {"type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}"},
+                    {"type": "mrkdwn", "text": "*Status:*\n${{ job.status }}"}
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -1,0 +1,88 @@
+# ============================================================
+# Dockerfile Frontend - Hardened para Cloud Run
+# Multi-stage: Build (Node) -> Runtime (Nginx distroless/alpine)
+# ============================================================
+
+# ============================================================
+# STAGE 1: Builder - Build frontend
+# ============================================================
+FROM node:20-alpine AS builder
+
+# Instalar dependencias de build
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copiar package files primero (cache layer)
+COPY package*.json ./
+
+# Instalar dependencias (solo production)
+RUN npm ci --only=production --ignore-scripts && \
+    npm cache clean --force
+
+# Copiar código fuente
+COPY . .
+
+# Build de producción
+RUN npm run build
+
+# ============================================================
+# STAGE 2: Runtime - Nginx Alpine Hardened
+# ============================================================
+FROM nginx:alpine AS runtime
+
+# Metadata
+LABEL maintainer="Equipo Unidad 3 - Administración de Redes" \
+      version="1.0.0" \
+      description="Frontend Service - Hardened para Cloud Run" \
+      org.opencontainers.image.source="https://github.com/tu-org/tu-repo" \
+      org.opencontainers.image.documentation="https://github.com/tu-org/tu-repo/blob/main/docs/seguridad-u3.md" \
+      org.opencontainers.image.licenses="MIT"
+
+# Hardening: Actualizar paquetes y limpiar
+RUN apk upgrade --no-cache && \
+    apk add --no-cache curl && \
+    rm -rf /var/cache/apk/*
+
+# Hardening: Usuario no-root (nginx ya tiene usuario nginx)
+# Verificar que nginx user existe
+RUN id nginx || addgroup -g 101 -S nginx && adduser -u 101 -S nginx -G nginx
+
+# Copiar configuración nginx hardened
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY conf.d/ /etc/nginx/conf.d/
+
+# Copiar archivos estáticos buildados
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Hardening: Permisos de solo lectura
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 555 /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    chown -R nginx:nginx /etc/nginx/conf.d && \
+    touch /var/run/nginx.pid && \
+    chown nginx:nginx /var/run/nginx.pid
+
+# Crear directorios necesarios con permisos correctos
+RUN mkdir -p /var/cache/nginx/client_temp \
+             /var/cache/nginx/proxy_temp \
+             /var/cache/nginx/fastcgi_temp \
+             /var/cache/nginx/uwsgi_temp \
+             /var/cache/nginx/scgi_temp && \
+    chown -R nginx:nginx /var/cache/nginx
+
+WORKDIR /usr/share/nginx/html
+
+# Puerto
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Usuario no-root
+USER nginx
+
+# Comando de inicio
+ENTRYPOINT ["nginx", "-g", "daemon off;"]

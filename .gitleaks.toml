@@ -1,0 +1,377 @@
+# ============================================================
+# .gitleaks.toml - Configuración personalizada para gitleaks
+# Reglas específicas para el proyecto Unidad 3
+# ============================================================
+
+# Configuración general
+title = "Gitleaks Config - Unidad 3 Administración de Redes"
+description = "Reglas personalizadas para detección de secretos en el proyecto"
+
+# Configuración de reporte
+[report]
+format = "sarif"
+path = "gitleaks-report.sarif"
+verbose = true
+redact = true  # Ofuscar secretos en reporte
+
+# Configuración de escaneo
+[allowlist]
+description = "Archivos y patrones permitidos (falsos positivos)"
+files = [
+    "*.md",           # Documentación
+    "*.txt",          # Archivos de texto
+    "*.example",      # Archivos de ejemplo
+    "*.template",     # Plantillas
+    "*.sample",       # Ejemplos
+    "*.yml.example",  # YAML de ejemplo
+    "*.yaml.example",
+    ".env.example",   # Variables de entorno de ejemplo
+    "docker-compose.yml",  # Docker compose (puede tener placeholders)
+    "docker-compose.*.yml",
+    "*.tfvars.example",  # Terraform variables example
+    "*.tf.example",
+    "*.json.example",
+    "*.sh.example",
+    "*.py.example",
+    "*.js.example",
+    "*.ts.example",
+]
+
+# Permitir commits específicos (hashes) - agregar según necesidad
+commits = [
+    # "abc1234",  # Commit con falso positivo conocido
+]
+
+# Patrones permitidos (regex)
+patterns = [
+    "example",
+    "placeholder",
+    "changeme",
+    "your-.*-here",
+    "your_.*_here",
+    "INSERT_.*_HERE",
+    "REPLACE_ME",
+    "CHANGE_ME",
+    "TODO",
+    "FIXME",
+    "XXX",
+    "dummy",
+    "test",
+    "mock",
+    "fake",
+    "placeholder",
+    "changethis",
+    "changethispassword",
+    "changethissecret",
+    "changethiskey",
+]
+
+# ============================================================
+# REGLAS PERSONALIZADAS ESPECÍFICAS DEL PROYECTO
+# ============================================================
+
+# AWS Access Key ID
+[[rules]]
+id = "aws-access-key-id"
+description = "AWS Access Key ID"
+regex = '''(A3T|AKIA|AROA|AIDA|ANPA|AIPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["key", "aws"]
+entropy = 4.5
+
+# AWS Secret Access Key
+[[rules]]
+id = "aws-secret-access-key"
+description = "AWS Secret Access Key"
+regex = '''(?i)(aws_secret_access_key|aws_secret_key)\s*[:=]\s*[A-Za-z0-9/+=]{40}'''
+tags = ["key", "aws", "secret"]
+entropy = 4.0
+
+# GCP Service Account Key
+[[rules]]
+id = "gcp-service-account-key"
+description = "GCP Service Account Private Key"
+regex = '''(?i)("type":\s*"service_account".*"private_key":\s*")'''
+tags = ["key", "gcp", "service-account"]
+entropy = 4.5
+
+# GCP API Key
+[[rules]]
+id = "gcp-api-key"
+description = "GCP API Key"
+regex = '''AIza[0-9A-Za-z\-_]{35}'''
+tags = ["key", "gcp", "api"]
+entropy = 4.5
+
+# Generic Private Key (PEM format)
+[[rules]]
+id = "private-key-pem"
+description = "Private Key in PEM format"
+regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'''
+tags = ["key", "private", "pem"]
+entropy = 4.5
+
+# Generic Private Key (OpenSSH)
+[[rules]]
+id = "private-key-openssh"
+description = "OpenSSH Private Key"
+regex = '''-----BEGIN OPENSSH PRIVATE KEY-----'''
+tags = ["key", "private", "openssh"]
+entropy = 4.5
+
+# SSH Private Key
+[[rules]]
+id = "ssh-private-key"
+description = "SSH Private Key (RSA/DSA/ECDSA/ED25519)"
+regex = '''-----BEGIN (RSA|DSA|EC|ED25519) PRIVATE KEY-----'''
+tags = ["key", "ssh", "private"]
+entropy = 4.5
+
+# Generic Password in code
+[[rules]]
+id = "generic-password"
+description = "Hardcoded password in code"
+regex = '''(?i)(password|passwd|pwd)\s*[:=]\s*["'][^"']{8,}["']'''
+tags = ["credential", "password"]
+entropy = 3.5
+
+# Database URL with credentials
+[[rules]]
+id = "database-url"
+description = "Database connection string with credentials"
+regex = '''(?i)(postgresql|mysql|mongodb|redis)://[^:]+:[^@]+@'''
+tags = ["credential", "database", "connection-string"]
+entropy = 4.0
+
+# JWT Token
+[[rules]]
+id = "jwt-token"
+description = "JWT Token (Bearer)"
+regex = '''eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*'''
+tags = ["token", "jwt", "auth"]
+entropy = 4.5
+
+# Generic API Key (bearer token style)
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key / Bearer Token"
+regex = '''(?i)(api[_-]?key|apikey|access[_-]?token|secret[_-]?key)\s*[:=]\s*["'][A-Za-z0-9_\-]{20,}["']'''
+tags = ["key", "api", "token"]
+entropy = 4.0
+
+# GitHub Personal Access Token
+[[rules]]
+id = "github-pat"
+description = "GitHub Personal Access Token"
+regex = '''gh[pousr]_[A-Za-z0-9_]{36,251}'''
+tags = ["key", "github", "pat"]
+entropy = 4.5
+
+# GitLab Personal Access Token
+[[rules]]
+id = "gitlab-pat"
+description = "GitLab Personal Access Token"
+regex = '''glpat-[A-Za-z0-9_\-]{20,}'''
+tags = ["key", "gitlab", "pat"]
+entropy = 4.5
+
+# Slack Token
+[[rules]]
+id = "slack-token"
+description = "Slack Bot/User Token"
+regex = '''xox[baprs]-[A-Za-z0-9-]{10,48}'''
+tags = ["key", "slack", "token"]
+entropy = 4.0
+
+# Docker Hub Token
+[[rules]]
+id = "docker-hub-token"
+description = "Docker Hub Access Token"
+regex = '''dckr_pat_[A-Za-z0-9]{32,}'''
+tags = ["key", "docker", "token"]
+entropy = 4.0
+
+# NPM Token
+[[rules]]
+id = "npm-token"
+description = "NPM Authentication Token"
+regex = '''npm_[A-Za-z0-9]{36}'''
+tags = ["key", "npm", "token"]
+entropy = 4.0
+
+# Generic Secret (high entropy string)
+[[rules]]
+id = "high-entropy-string"
+description = "High entropy string (potential secret)"
+regex = '''[A-Za-z0-9+/=]{40,}'''
+tags = ["secret", "high-entropy"]
+entropy = 4.5
+# Excluir strings comunes de bajo riesgo
+allowlist = true
+
+# Terraform Variables (.tfvars)
+[[rules]]
+id = "terraform-tfvars"
+description = "Terraform variables file with secrets"
+regex = '''(?i)(password|secret|key|token)\s*=\s*["'][^"']+["']'''
+tags = ["credential", "terraform", "tfvars"]
+entropy = 3.5
+path = "*.tfvars"
+
+# Kubernetes Secrets
+[[rules]]
+id = "k8s-secret"
+description = "Kubernetes Secret manifest"
+regex = '''kind:\s*Secret\s*\n.*?stringData:\s*\n\s*[a-zA-Z0-9_-]+:\s*["'][^"']+["']'''
+tags = ["credential", "kubernetes", "secret"]
+entropy = 3.5
+path = "*.yaml"
+
+# .env files
+[[rules]]
+id = "dotenv-secrets"
+description = "Secrets in .env files"
+regex = '''(?i)(password|secret|key|token|api[_-]?key)\s*=\s*[^\s#]+'''
+tags = ["credential", "dotenv", "env"]
+entropy = 3.5
+path = ".env*"
+
+# Certificate Private Key
+[[rules]]
+id = "cert-private-key"
+description = "Certificate Private Key"
+regex = '''-----BEGIN (CERTIFICATE|PRIVATE KEY)-----'''
+tags = ["key", "certificate", "private"]
+entropy = 4.5
+
+# Azure Client Secret
+[[rules]]
+id = "azure-client-secret"
+description = "Azure Client Secret"
+regex = '''(?i)(client[_-]?secret|client[_-]?id)\s*[:=]\s*["'][A-Za-z0-9_\-]{20,}["']'''
+tags = ["key", "azure", "secret"]
+entropy = 4.0
+
+# Alibaba Cloud Access Key
+[[rules]]
+id = "alibaba-access-key"
+description = "Alibaba Cloud Access Key ID"
+regex = '''LTAI[A-Za-z0-9]{20}'''
+tags = ["key", "alibaba", "access-key"]
+entropy = 4.0
+
+# DigitalOcean Token
+[[rules]]
+id = "digitalocean-token"
+description = "DigitalOcean Personal Access Token"
+regex = '''dop_v1_[A-Za-z0-9]{64}'''
+tags = ["key", "digitalocean", "token"]
+entropy = 4.5
+
+# Heroku API Key
+[[rules]]
+id = "heroku-api-key"
+description = "Heroku API Key"
+regex = '''[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
+tags = ["key", "heroku", "api"]
+entropy = 4.0
+
+# Stripe API Key
+[[rules]]
+id = "stripe-api-key"
+description = "Stripe API Key (Live/Test)"
+regex = '''sk_(live|test)_[A-Za-z0-9]{24,}'''
+tags = ["key", "stripe", "api"]
+entropy = 4.5
+
+# Twilio Account SID / Auth Token
+[[rules]]
+id = "twilio-credentials"
+description = "Twilio Account SID / Auth Token"
+regex = '''AC[A-Za-z0-9]{32}'''
+tags = ["key", "twilio", "sid"]
+entropy = 4.0
+
+[[rules]]
+id = "twilio-auth-token"
+description = "Twilio Auth Token"
+regex = '''(?i)auth[_-]?token\s*[:=]\s*["'][A-Za-z0-9]{32}["']'''
+tags = ["key", "twilio", "auth-token"]
+entropy = 4.0
+
+# SendGrid API Key
+[[rules]]
+id = "sendgrid-api-key"
+description = "SendGrid API Key"
+regex = '''SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'''
+tags = ["key", "sendgrid", "api"]
+entropy = 4.5
+
+# Mailgun API Key
+[[rules]]
+id = "mailgun-api-key"
+description = "Mailgun API Key"
+regex = '''key-[A-Za-z0-9]{32}'''
+tags = ["key", "mailgun", "api"]
+entropy = 4.0
+
+# PagerDuty API Key
+[[rules]]
+id = "pagerduty-api-key"
+description = "PagerDuty API Key"
+regex = '''[A-Za-z0-9]{20,}'''
+tags = ["key", "pagerduty", "api"]
+entropy = 4.0
+# Nota: Este es genérico, ajustar según necesidad
+
+# New Relic License Key
+[[rules]]
+id = "newrelic-license-key"
+description = "New Relic License Key"
+regex = '''^([0-9a-f]{32}|[0-9a-f]{40})$'''
+tags = ["key", "newrelic", "license"]
+entropy = 4.0
+
+# Datadog API Key
+[[rules]]
+id = "datadog-api-key"
+description = "Datadog API Key"
+regex = '''[a-f0-9]{32}'''
+tags = ["key", "datadog", "api"]
+entropy = 4.0
+
+# Splunk Token
+[[rules]]
+id = "splunk-token"
+description = "Splunk HEC Token"
+regex = '''[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}'''
+tags = ["key", "splunk", "hec"]
+entropy = 4.5
+
+# Generic High Entropy (catch-all)
+[[rules]]
+id = "generic-high-entropy"
+description = "Generic high entropy string (potential secret)"
+regex = '''[A-Za-z0-9+/=]{40,}'''
+tags = ["secret", "high-entropy"]
+entropy = 5.0
+allowlist = true
+
+# ============================================================
+# NOTAS DE USO
+# ============================================================
+# Para usar este config:
+# gitleaks detect --config .gitleaks.toml --source . --report-format sarif --report-path gitleaks.sarif
+#
+# En CI/CD:
+# - name: gitleaks
+#   uses: gitleaks/gitleaks-action@v2
+#   with:
+#     config: .gitleaks.toml
+#
+# Para ignorar un falso positivo específico en un commit:
+# git commit --no-verify -m "commit message"  # Solo si es FALSO POSITIVO confirmado
+#
+# Para agregar excepción permanente:
+# 1. Agregar patrón a [allowlist].patterns
+# 2. O agregar archivo a [allowlist].files
+# 3. O agregar commit hash a [allowlist].commits

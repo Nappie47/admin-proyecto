@@ -1,0 +1,95 @@
+# Container Structure Test Configuration
+# Para validar hardening de contenedores en CI/CD
+
+schemaVersion: '2.0.0'
+
+# Tests globales para todas las imágenes
+global:
+  # Verificar usuario no-root
+  - name: non-root-user
+    command: "id"
+    expectedOutput: ["uid=1000", "gid=1000"]
+    shouldFail: false
+
+  # Verificar read-only filesystem
+  - name: read-only-filesystem
+    command: "touch /test-write"
+    shouldFail: true
+    expectedOutput: ["Read-only file system"]
+
+  # Verificar capabilities drop
+  - name: capabilities-dropped
+    command: "capsh --print"
+    expectedOutput: ["Current: =ep"]
+    shouldFail: false
+
+  # Verificar no privileged
+  - name: not-privileged
+    command: "cat /proc/self/status | grep CapEff"
+    expectedOutput: ["0000000000000000"]
+    shouldFail: false
+
+  # Verificar no hay shell interactivo innecesario
+  - name: minimal-shell
+    command: "which bash sh"
+    shouldFail: true
+
+# Tests específicos para API
+api:
+  - name: api-health-endpoint
+    command: "curl -f http://localhost:8080/health"
+    expectedOutput: ["healthy"]
+    shouldFail: false
+
+  - name: api-non-root-process
+    command: "ps aux | grep uvicorn | grep -v grep"
+    expectedOutput: ["nonroot"]
+    shouldFail: false
+
+  - name: api-port-8080
+    command: "netstat -tlnp | grep :8080"
+    shouldFail: false
+
+  - name: api-no-unnecessary-packages
+    command: "pip list --format=freeze | wc -l"
+    expectedOutput: ["< 50"]
+    shouldFail: false
+
+# Tests específicos para Frontend
+frontend:
+  - name: frontend-nginx-running
+    command: "pgrep nginx"
+    shouldFail: false
+
+  - name: frontend-port-8080
+    command: "netstat -tlnp | grep :8080"
+    shouldFail: false
+
+  - name: frontend-security-headers
+    command: "curl -s -I http://localhost:8080 | grep -i 'x-content-type-options\\|x-frame-options\\|x-xss-protection'"
+    expectedOutput: ["nosniff", "DENY", "1; mode=block"]
+    shouldFail: false
+
+  - name: frontend-static-assets
+    command: "ls /usr/share/nginx/html | grep -E 'index.html|assets'"
+    shouldFail: false
+
+  - name: frontend-nginx-user
+    command: "ps aux | grep nginx | grep -v grep | grep nginx"
+    shouldFail: false
+
+# Tests específicos para AI Service
+ai-service:
+  - name: ai-health-endpoint
+    command: "curl -f http://localhost:8080/health"
+    expectedOutput: ["healthy"]
+    shouldFail: false
+
+  - name: ai-model-loaded
+    command: "python -c \"import sys; sys.path.append('/app'); from main import model; print('Model loaded')\""
+    shouldFail: false
+
+  - name: ai-non-root
+    command: "ps aux | grep uvicorn | grep -v grep"
+    expectedOutput: ["appuser"]
+    shouldFail: false
