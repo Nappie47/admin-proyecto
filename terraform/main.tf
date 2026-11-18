@@ -1,492 +1,412 @@
-# Terraform Configuration for Unidad 3 - Google Cloud Run Security
-# Arquitectura: VPC, Cloud Run, Cloud SQL, Cloud Armor, Secret Manager, KMS, IAM
+# ============================================================
+# Terraform Main Configuration - Unidad 3 AWS
+# ============================================================
 
 terraform {
   required_version = ">= 1.5.0"
-
   required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.30"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 5.30"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.9"
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
     }
   }
+}
 
-  backend "local" {
-    path = "terraform.tfstate"
+provider "aws" {
+  region = var.aws_region
+  default_tags {
+    tags = var.common_tags
   }
 }
 
-provider "google" {
-  project = var.project_id
-  region  = var.region
-}
-
-provider "google-beta" {
-  project = var.project_id
-  region  = var.region
-}
-
-# Random resources for unique names
-resource "random_id" "suffix" {
-  byte_length = 4
-}
-
-resource "random_password" "db_password" {
-  length  = 32
-  special = true
-  override_special = "_%@"
-}
-
-resource "time_rotating" "secret_rotation" {
-  rotation_days = 30
-}
-
 # ============================================================
-# MÓDULO: VPC NETWORK
+# PARTE A.1: VPC y Segmentación de Red
 # ============================================================
-module "vpc" {
-  source = "./modules/vpc"
 
-  project_id       = var.project_id
-  region           = var.region
-  network_name     = "${var.project_name}-vpc"
-  suffix           = random_id.suffix.hex
+# 1. VPC Propia (No default)
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
-  public_subnet_cidr  = "10.0.1.0/24"
-  private_subnet_cidr = "10.0.2.0/24"
-
-  # Cloud NAT
-  enable_nat           = true
-  nat_min_ports_per_vm = 64
-
-  # Firewall
-  enable_default_deny = true
-  allowed_lb_ranges   = ["35.191.0.0/16", "130.211.0.0/22"]
-
-  labels = var.common_labels
+  tags = {
+    Name = "${var.project_name}-vpc"
+  }
 }
 
-# ============================================================
-# MÓDULO: CLOUD KMS (para CMEK)
-# ============================================================
-module "kms" {
-  source = "./modules/kms"
+# 2. Subred Pública (Gateway / Ingress / Proxy)
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = var.availability_zone
+  map_public_ip_on_launch = true
 
-  project_id = var.project_id
-  region     = var.region
-  key_ring_name = "${var.project_name}-keyring"
-  suffix     = random_id.suffix.hex
+  tags = {
+    Name = "${var.project_name}-public-subnet"
+    Tier = "Public-Ingress"
+  }
+}
 
-  keys = {
-    "cloudsql"  = { purpose = "ENCRYPT_DECRYPT", rotation_period = "2592000s" } # 30 días
-    "storage"   = { purpose = "ENCRYPT_DECRYPT", rotation_period = "2592000s" }
-    "secrets"   = { purpose = "ENCRYPT_DECRYPT", rotation_period = "7776000s" } # 90 días
+# 3. Subred Privada (Backend, BD, Servicios Internos)
+resource "aws_subnet" "private" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.private_subnet_cidr
+  availability_zone       = var.availability_zone
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.project_name}-private-subnet"
+    Tier = "Private-Backend-DB"
+  }
+}
+
+# 4. Internet Gateway (IGW) para la Subred Pública
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project_name}-igw"
+  }
+}
+
+# 5. Elastic IP y NAT Gateway para Egress Seguro de la Subred Privada
+resource "aws_eip" "nat" {
+  count  = var.enable_nat_gateway ? 1 : 0
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-nat-eip"
+  }
+}
+
+resource "aws_nat_gateway" "nat" {
+  count         = var.enable_nat_gateway ? 1 : 0
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = aws_subnet.public.id
+
+  tags = {
+    Name = "${var.project_name}-nat-gateway"
   }
 
-  labels = var.common_labels
+  depends_on = [aws_internet_gateway.igw]
 }
 
-# ============================================================
-# MÓDULO: SECRET MANAGER
-# ============================================================
-module "secrets" {
-  source = "./modules/secret-manager"
+# 6. Tablas de Rutas
+# Ruta Pública -> Internet Gateway
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
 
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
-
-  kms_key_name = module.kms.keys["secrets"].id
-
-  secrets = {
-    "db-password" = {
-      value     = random_password.db_password.result
-      labels    = { environment = "production", type = "database" }
-      rotation  = { period = "2592000s" } # 30 días
-    }
-    "jwt-secret" = {
-      value     = random_password.db_password.result
-      labels    = { environment = "production", type = "jwt" }
-      rotation  = { period = "2592000s" }
-    }
-    "api-keys" = {
-      value     = "{}"
-      labels    = { environment = "production", type = "api" }
-      rotation  = { period = "7776000s" }
-    }
-    "redis-password" = {
-      value     = random_password.db_password.result
-      labels    = { environment = "production", type = "redis" }
-      rotation  = { period = "2592000s" }
-    }
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
   }
 
-  labels = var.common_labels
-}
-
-# ============================================================
-# MÓDULO: CLOUD SQL (PostgreSQL)
-# ============================================================
-module "cloudsql" {
-  source = "./modules/cloudsql"
-
-  project_id     = var.project_id
-  region         = var.region
-  suffix         = random_id.suffix.hex
-
-  network        = module.vpc.network_name
-  private_subnet = module.vpc.private_subnet_name
-
-  database_version = "POSTGRES_15"
-  tier             = "db-f1-micro" # Free tier eligible
-
-  # CMEK
-  kms_key_name = module.kms.keys["cloudsql"].id
-
-  # Configuración
-  availability_type = "ZONAL"
-  storage_type      = "SSD"
-  storage_auto_resize = true
-  storage_size_gb   = 10
-
-  # Backups
-  backup_configuration = {
-    enabled            = true
-    start_time         = "03:00"
-    location           = var.region
-    point_in_time_recovery_enabled = true
-    transaction_log_retention_days = 7
+  tags = {
+    Name = "${var.project_name}-public-rt"
   }
-
-  # IP Config - Solo IP privada
-  ip_configuration = {
-    authorized_networks = []
-    require_ssl         = true
-    private_network     = module.vpc.network_name
-  }
-
-  # Database y usuario
-  database_name = var.project_name
-  user_name     = "app_user"
-  user_password = random_password.db_password.result
-
-  labels = var.common_labels
 }
 
-# ============================================================
-# MÓDULO: REDIS (Memorystore)
-# ============================================================
-module "redis" {
-  source = "./modules/redis"
-
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
-
-  network = module.vpc.network_name
-
-  tier           = "BASIC"
-  memory_size_gb = 1
-  redis_version  = "REDIS_7_0"
-
-  # Auth
-  auth_enabled = true
-  auth_password = random_password.db_password.result
-
-  labels = var.common_labels
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
 }
 
-# ============================================================
-# MÓDULO: CLOUD ARMOR (WAF)
-# ============================================================
-module "cloud_armor" {
-  source = "./modules/cloud-armor"
+# Ruta Privada -> NAT Gateway
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
 
-  project_id = var.project_id
-  suffix     = random_id.suffix.hex
-
-  policy_name = "${var.project_name}-armor-policy"
-
-  # Reglas OWASP Top 10 + Rate limiting
-  enable_owasp_rules = true
-  enable_rate_limiting = true
-  rate_limit_threshold = 1000 # requests per minute per IP
-
-  labels = var.common_labels
-}
-
-# ============================================================
-# MÓDULO: LOAD BALANCER + SSL
-# ============================================================
-module "load_balancer" {
-  source = "./modules/load-balancer"
-
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
-
-  # Cloud Armor
-  security_policy = module.cloud_armor.security_policy_id
-
-  # SSL Certificate (Google-managed)
-  domains = var.domains
-
-  # Backend: Cloud Run services
-  cloud_run_services = {
-    "api" = {
-      service_name = "${var.project_name}-api"
-      path_matcher = "/api/*"
-    }
-    "frontend" = {
-      service_name = "${var.project_name}-frontend"
-      path_matcher = "/*"
+  dynamic "route" {
+    for_each = var.enable_nat_gateway ? [1] : []
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = aws_nat_gateway.nat[0].id
     }
   }
 
-  # SSL Policy
-  ssl_policy_profile = "MODERN" # TLS 1.2 + 1.3 only
+  tags = {
+    Name = "${var.project_name}-private-rt"
+  }
+}
 
-  labels = var.common_labels
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
 }
 
 # ============================================================
-# MÓDULO: CLOUD RUN SERVICES
+# PARTE D.1: Security Groups con Política Default-Deny y Encadenamiento
 # ============================================================
-module "cloud_run" {
-  source = "./modules/cloud-run"
 
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
+# Security Group 1: Gateway / Ingress Público
+resource "aws_security_group" "gateway" {
+  name        = "${var.project_name}-gateway-sg"
+  description = "SG para Gateway L7 con acceso web HTTP/HTTPS y SSH restringido"
+  vpc_id      = aws_vpc.main.id
 
-  # VPC Connector para acceso a recursos privados
-  vpc_connector = module.vpc.vpc_connector_id
-
-  # Service Account
-  service_account_email = module.iam.cloud_run_sa_email
-
-  # Secrets
-  secrets = {
-    "db-password" = module.secrets.secret_versions["db-password"]
-    "jwt-secret"  = module.secrets.secret_versions["jwt-secret"]
-    "redis-password" = module.secrets.secret_versions["redis-password"]
+  # HTTP (80) -> Redireccion a HTTPS
+  ingress {
+    description = "HTTP Ingress for Redirect"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Cloud SQL
-  cloudsql_instance = module.cloudsql.instance_connection_name
+  # HTTPS (443) -> Trafico cifrado principal
+  ingress {
+    description = "HTTPS Secure Ingress"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-  # Redis
-  redis_host = module.redis.host
+  # SSH (22) -> Restringido exclusivamente a la IP del administrador
+  ingress {
+    description = "SSH Admin Access (IP especifica)"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.admin_ssh_ip]
+  }
 
-  # Servicios
-  services = {
-    "api" = {
-      image = "${var.artifact_registry_repo}/api:latest"
-      cpu   = "1000m"
-      memory = "512Mi"
-      min_instances = 0
-      max_instances = 10
-      concurrency = 80
-      env_vars = {
-        "ENVIRONMENT" = "production"
-        "DB_HOST" = "/cloudsql/${module.cloudsql.instance_connection_name}"
-        "DB_PORT" = "5432"
-        "DB_NAME" = var.project_name
-        "DB_USER" = "app_user"
-        "REDIS_HOST" = module.redis.host
-        "REDIS_PORT" = "6379"
+  # Egress permitido
+  egress {
+    description = "Allow Outbound Traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-gateway-sg"
+  }
+}
+
+# Security Group 2: Servicios Internos (Backend, DB) - ENCADENADO
+resource "aws_security_group" "internal_app" {
+  name        = "${var.project_name}-internal-app-sg"
+  description = "SG Interno encadenado: solo acepta conexiones originadas desde sg-gateway"
+  vpc_id      = aws_vpc.main.id
+
+  # Backend API (5000) solo desde el Gateway
+  ingress {
+    description     = "API access only from Gateway SG"
+    from_port       = 5000
+    to_port         = 5000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.gateway.id]
+  }
+
+  # PostgreSQL DB (5432) solo desde el Gateway/Backend
+  ingress {
+    description     = "Database access only from Gateway/Backend SG"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.gateway.id]
+  }
+
+  # Monitoreo interno (Prometheus 9090 / Grafana 3000) solo desde Gateway
+  ingress {
+    description     = "Monitoring access only from Gateway SG"
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.gateway.id]
+  }
+
+  egress {
+    description = "Allow internal outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-internal-app-sg"
+  }
+}
+
+# ============================================================
+# PARTE C.3: Criptografía en Reposo (KMS) y Respaldos S3
+# ============================================================
+
+# Llave KMS administrada por el cliente (CMEK)
+resource "aws_kms_key" "cemetery_key" {
+  description             = "Llave KMS CMEK para cifrado de volumenes EBS y respaldos S3 de Unidad 3"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "${var.project_name}-kms-key"
+  }
+}
+
+resource "aws_kms_alias" "cemetery_key_alias" {
+  name          = "alias/${var.project_name}-key"
+  target_key_id = aws_kms_key.cemetery_key.key_id
+}
+
+# Bucket S3 para Respaldos de la Unidad 2
+resource "aws_s3_bucket" "backups" {
+  bucket        = "${var.project_name}-backups-${var.environment}"
+  force_destroy = false
+
+  tags = {
+    Name = "${var.project_name}-backups-bucket"
+  }
+}
+
+# Versionado activado en S3
+resource "aws_s3_bucket_versioning" "backups_versioning" {
+  bucket = aws_s3_bucket.backups.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Cifrado en reposo obligatorio con KMS (SSE-KMS)
+resource "aws_s3_bucket_server_side_encryption_configuration" "backups_encryption" {
+  bucket = aws_s3_bucket.backups.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.cemetery_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+# Bloqueo total de acceso publico en S3
+resource "aws_s3_bucket_public_access_block" "backups_access_block" {
+  bucket = aws_s3_bucket.backups.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ============================================================
+# PARTE A.2: Identidad y Control de Acceso (IAM Instance Profile)
+# ============================================================
+
+resource "aws_iam_role" "ec2_role" {
+  name = "${var.project_name}-ec2-instance-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
       }
-    }
-    "worker" = {
-      image = "${var.artifact_registry_repo}/worker:latest"
-      cpu   = "500m"
-      memory = "256Mi"
-      min_instances = 0
-      max_instances = 5
-      concurrency = 1
-      env_vars = {
-        "ENVIRONMENT" = "production"
-        "DB_HOST" = "/cloudsql/${module.cloudsql.instance_connection_name}"
-        "DB_PORT" = "5432"
-        "DB_NAME" = var.project_name
-        "DB_USER" = "app_user"
-        "REDIS_HOST" = module.redis.host
-        "REDIS_PORT" = "6379"
+    ]
+  })
+}
+
+# Politica de permisos minimos: Acceso al bucket S3 y KMS
+resource "aws_iam_role_policy" "s3_backup_policy" {
+  name = "${var.project_name}-s3-backup-policy"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "S3BackupAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObjectVersion"
+        ]
+        Resource = [
+          aws_s3_bucket.backups.arn,
+          "${aws_s3_bucket.backups.arn}/*"
+        ]
+      },
+      {
+        Sid    = "KMSAccess"
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.cemetery_key.arn]
       }
-    }
-    "ai-service" = {
-      image = "${var.artifact_registry_repo}/ai-service:latest"
-      cpu   = "2000m"
-      memory = "2Gi"
-      min_instances = 0
-      max_instances = 3
-      concurrency = 10
-      env_vars = {
-        "ENVIRONMENT" = "production"
-        "MODEL_PATH" = "/models"
-      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "${var.project_name}-ec2-instance-profile"
+  role = aws_iam_role.ec2_role.name
+}
+
+# ============================================================
+# INSTANCIA EC2 - Servidor Docker con Hardening y Cifrado EBS
+# ============================================================
+
+# AMI Ubuntu 22.04 LTS Oficial
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_instance" "app_server" {
+  ami                  = data.aws_ami.ubuntu.id
+  instance_type        = var.instance_type
+  subnet_id            = aws_subnet.public.id
+  key_name             = var.key_name
+  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+
+  vpc_security_group_ids = [
+    aws_security_group.gateway.id,
+    aws_security_group.internal_app.id
+  ]
+
+  # Volumen EBS cifrado con llave KMS (Requisito 4.3)
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    encrypted             = true
+    kms_key_id            = aws_kms_key.cemetery_key.arn
+    delete_on_termination = true
+
+    tags = {
+      Name = "${var.project_name}-root-volume"
     }
   }
 
-  # Hardening config
-  run_as_non_root = true
-  read_only_root_filesystem = true
-  allow_privilege_escalation = false
-  drop_all_capabilities = true
-  cpu_limit = "1000m"
-  memory_limit = "512Mi"
-
-  labels = var.common_labels
-}
-
-# ============================================================
-# MÓDULO: IAM
-# ============================================================
-module "iam" {
-  source = "./modules/iam"
-
-  project_id = var.project_id
-  suffix     = random_id.suffix.hex
-
-  # Service Accounts
-  service_accounts = {
-    "cloud-run" = {
-      display_name = "Cloud Run Service Account"
-      description  = "Service account for Cloud Run services"
-      roles = [
-        "roles/cloudsql.client",
-        "roles/secretmanager.secretAccessor",
-        "roles/datastore.viewer",
-        "roles/logging.logWriter",
-        "roles/monitoring.metricWriter",
-        "roles/cloudtrace.agent"
-      ]
-    }
-    "cloud-build" = {
-      display_name = "Cloud Build Service Account"
-      description  = "Service account for Cloud Build pipelines"
-      roles = [
-        "roles/run.admin",
-        "roles/artifactregistry.writer",
-        "roles/secretmanager.secretAccessor",
-        "roles/cloudsql.client",
-        "roles/iam.serviceAccountUser"
-      ]
-    }
-    "terraform" = {
-      display_name = "Terraform Service Account"
-      description  = "Service account for Terraform deployments"
-      roles = [
-        "roles/owner" # En producción usar roles más específicos
-      ]
-    }
+  # Metadatos seguros obligatorios IMDSv2 (Defensa contra SSRF)
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required" # IMDSv2 forzado
+    http_put_response_hop_limit = 1
   }
 
-  # Workload Identity
-  workload_identity_pool = "${var.project_id}.svc.id.goog"
-  workload_identity_provider = "${var.project_id}.svc.id.goog[PROVIDER]"
-
-  labels = var.common_labels
-}
-
-# ============================================================
-# MÓDULO: ARTIFACT REGISTRY
-# ============================================================
-module "artifact_registry" {
-  source = "./modules/artifact-registry"
-
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
-
-  repository_name = "${var.project_name}-containers"
-  format         = "DOCKER"
-
-  labels = var.common_labels
-}
-
-# ============================================================
-# MÓDULO: CLOUD BUILD (CI/CD)
-# ============================================================
-module "cloud_build" {
-  source = "./modules/cloud-build"
-
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
-
-  service_account_email = module.iam.cloud_build_sa_email
-
-  # Triggers
-  triggers = {
-    "main-branch" = {
-      branch_name = "main"
-      build_config = "cloudbuild/cloudbuild.yaml"
-    }
-    "security-audit" = {
-      branch_name = "main"
-      build_config = "cloudbuild/cloudbuild-audit.yaml"
-    }
+  tags = {
+    Name = "${var.project_name}-docker-server"
+    Role = "Application-Gateway-Database"
   }
-
-  labels = var.common_labels
-}
-
-# ============================================================
-# MÓDULO: MONITORING & LOGGING
-# ============================================================
-module "monitoring" {
-  source = "./modules/monitoring"
-
-  project_id = var.project_id
-  region     = var.region
-  suffix     = random_id.suffix.hex
-
-  # Alerting policies
-  notification_channels = ["email"] # Configurar en variables
-
-  # Uptime checks para Cloud Run services
-  uptime_checks = ["api", "frontend"]
-
-  labels = var.common_labels
-}
-
-# ============================================================
-# OUTPUTS
-# ============================================================
-output "vpc_network" {
-  value = module.vpc.network_name
-}
-
-output "cloud_run_urls" {
-  value = module.cloud_run.service_urls
-}
-
-output "load_balancer_ip" {
-  value = module.load_balancer.forwarding_rule_ip
-}
-
-output "cloudsql_connection_name" {
-  value = module.cloudsql.instance_connection_name
-}
-
-output "artifact_registry_repo" {
-  value = module.artifact_registry.repository_url
-}
-
-output "secret_versions" {
-  value = module.secrets.secret_versions
-  sensitive = true
 }

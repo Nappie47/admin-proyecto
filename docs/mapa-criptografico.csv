@@ -1,11 +1,9 @@
-Uso,Algoritmo/Mecanismo,Tipo,Llave Generación/Almacenamiento,Renovación
-TLS/HTTPS (Load Balancer),TLS 1.3 AES_256_GCM,Simétrica (sesión) / Asimétrica (certificado),Google-managed SSL / Let's Encrypt,Auto (90 días)
-Workload Identity / OIDC,OIDC / mTLS,Asimétrica,Google-managed / Service Account keys,Auto (rotación SA keys)
-Secret Manager,AES-256-GCM,Simétrica,Google-managed / CMEK (Cloud KMS),Configurable (30 días)
-Cloud SQL (CMEK),AES-256,Simétrica,Cloud KMS CryptoKey,Rotación automática KMS (30 días)
-Cloud Storage (CMEK),AES-256,Simétrica,Cloud KMS CryptoKey,Rotación automática KMS
-Contraseñas BD,Argon2id,Hash,Generado en app, almacenado hash,Re-hash en login
-JWT/Session tokens,RS256 / HS256,Asimétrica/Simétrica,Cloud KMS / Secret Manager,Rotación 24h-7d
-Envelope Encryption (PII),AES-256-GCM + KMS,Híbrida,DEK en app, KEK en Cloud KMS,Rotación KEK anual
-Cloud Armor WAF (firmas),HMAC-SHA256,Simétrica,Google-managed,Auto
-Cloud Build (firmas imágenes),Cosign/Rekor,Asimétrica,Cosign keys / Rekor transparency log,Rotación 90 días
+Uso / Mecanismo,Algoritmo,Tipo,Llave Generación / Almacenamiento,Rotación / Renovación
+Tráfico Web Seguro (HTTPS),TLS 1.3 / AES-256-GCM / PFS,Simétrica (sesión) / Asimétrica (certificado),Generada por Certbot / Let's Encrypt o ACM; almacenada en /etc/nginx/ssl,Renovación automática cada 90 días
+Acceso Remoto Administrativo (SSH),Ed25519 (Curva de Edwards Edwards25519),Asimétrica,Llave privada cliente local; llave pública en ~/.ssh/authorized_keys,Rotación anual o revocación inmediata ante compromiso
+Cifrado en Reposo de Volúmenes (EBS),AES-256 (AWS KMS XTS-AES-256),Simétrica,Llave administrada por el cliente (CMEK) en AWS KMS HSM,Rotación automática anual gestionada por AWS KMS
+Respaldos Fuera de Instancia (Amazon S3),AES-256 (SSE-KMS con aws:kms),Simétrica,AWS KMS Customer Managed Key alias/cementerio-u3-key,Rotación automática anual en AWS KMS
+Cifrado de Contraseñas de Usuarios,Bcrypt con factor de trabajo 12,Función Hash Criptográfica (One-Way),Sal criptográfica de 128 bits generada por registro en la BD,Re-hash automático en actualización de clave
+Firmas de Sesión y Autenticación (JWT),HMAC-SHA256 (HS256),Simétrica (MAC),Variable de entorno segura inyectada en EC2 (JWT_SECRET_KEY),Rotación cada 6 meses o ante reinicio de credenciales
+Mitigación DoS y Rate Limiting (WAF/Nginx),HMAC-SHA256 en memoria,Simétrica,Estructura binaria volátil generada por Nginx en memoria RAM,Volátil (se renueva con cada reinicio del contenedor Gateway)
+Vectores Biométricos de IA Facial,Descriptores Espaciales Sobel 128x128 con firma SHA-256,Hash / Vector numérico,Volumen Docker cemetery_ai_faces_u3 sobre EBS cifrado KMS,Inmutable por perfil de usuario enrolado

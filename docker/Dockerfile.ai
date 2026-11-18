@@ -1,89 +1,46 @@
 # ============================================================
-# Dockerfile AI Service - Hardened para Cloud Run
-# Para modelos ML ligeros (ONNX, TensorFlow Lite, etc.)
+# Dockerfile AI Service - Hardened para AWS EC2
+# OpenCV + Detección Facial Biométrica
+# Autores: Bryan Ahumada & Johan Muñoz
 # ============================================================
 
-# ============================================================
-# STAGE 1: Builder
-# ============================================================
-FROM python:3.11-alpine AS builder
+FROM python:3.11-slim-bookworm
 
-# Build dependencies
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    libffi-dev \
-    openssl-dev \
-    cargo \
-    cmake \
-    make \
-    g++
+LABEL maintainer="Bryan Ahumada & Johan Muñoz" \
+      version="3.0.0" \
+      description="Microservicio IA Biometria Facial Hardened - Unidad 3"
 
-WORKDIR /app
-
-# Copiar requirements
-COPY requirements-ai.txt .
-
-# Virtual environment
-RUN python -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements-ai.txt
-
-# ============================================================
-# STAGE 2: Runtime - Distroless con ML support
-# ============================================================
-# Usar imagen base con ML libraries preinstaladas
-FROM python:3.11-slim AS runtime-base
-
-# Actualizar e instalar solo runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    libstdc++6 \
-    && rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
-
-# Copiar venv del builder
-COPY --from=builder /opt/venv /opt/venv
-
-# Metadata
-LABEL maintainer="Equipo Unidad 3 - Administración de Redes" \
-      version="1.0.0" \
-      description="AI Service - Hardened para Cloud Run" \
-      org.opencontainers.image.source="https://github.com/tu-org/tu-repo" \
-      org.opencontainers.image.documentation="https://github.com/tu-org/tu-repo/blob/main/docs/seguridad-u3.md" \
-      org.opencontainers.image.licenses="MIT"
-
-# Hardening: Usuario no-root
-RUN groupadd -g 1000 -r appgroup && \
-    useradd -u 1000 -r -g appgroup -s /sbin/nologin -d /app appuser
-
-WORKDIR /app
-
-# Copiar venv
-COPY --from=builder /opt/venv /opt/venv
-
-# Copiar código
-COPY --chown=appuser:appuser ai/ /app/
-
-# Modelo (si es pequeño, incluir en imagen; si grande, montar desde Cloud Storage/GCS)
-# COPY --chown=appuser:appuser models/ /app/models/
-
-ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app" \
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    ENVIRONMENT=production \
-    MODEL_PATH="/app/models"
+    AI_DATA_DIR=/app/data/faces \
+    PORT=5001
 
-# Puerto
-EXPOSE 8080
+# Usuario no root seguro
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -s /sbin/nologin -d /app appuser
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+# Dependencias minimas de sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libgomp1 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Usuario no-root
+WORKDIR /app
+
+COPY services/ai-service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --chown=appuser:appgroup services/ai-service /app
+RUN mkdir -p /app/data/faces && chown -R appuser:appgroup /app/data/faces
+
 USER appuser
+EXPOSE 5001
 
-# Comando
-ENTRYPOINT ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+HEALTHCHECK --interval=20s --timeout=5s --retries=3 --start-period=10s \
+    CMD curl -f http://127.0.0.1:5001/health || exit 1
+
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--threads", "2", "--timeout", "60", "app:app"]

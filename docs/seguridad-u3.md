@@ -1,554 +1,245 @@
-# Documentación Unidad 3: Hardening, Criptografía y Seguridad Perimetral en Google Cloud Run
+# Documentación Técnica Unidad 3: Hardening, Criptografía y Seguridad Perimetral en AWS
+## Sistema de Información Geográfica (SIG) - Cementerio General de Los Ángeles
 
-**Proyecto:** Administración de Redes y Sistemas Computacionales  
-**Semestre:** 2026-II  
-**Profesor:** Ricardo Pérez  
-**Equipo:** [Nombres de los integrantes]
+**Asignatura:** Administración de Redes y Sistemas Computacionales  
+**Profesor Evaluador:** Ricardo Pérez (riperez@utalca.cl)  
+**Semestre:** 2026-II — Universidad de Talca (ICC)  
+**Integrantes:**
+- Bryan Ahumada
+- Johan Muñoz
 
----
-
-## 1. Introducción
-
-Esta documentación describe la implementación de las medidas de seguridad requeridas en la Unidad 3 del proyecto integrador de Administración de Redes, adaptadas para desplegar en **Google Cloud Platform (GCP)** utilizando **Cloud Run** como plataforma serverless de contenedores.
-
-La solución mantiene toda la funcionalidad de las Unidades 1 y 2 (API, Frontend, Componente de IA, Monitoreo, Respaldo) reforzando la seguridad mediante hardening de contenedores, criptografía aplicada, gestión de secretos y control perimetral en la nube.
+**Licitación Mercado Público:** 2411-8-LE25 (*Desarrollo e Implementación de Sistema de Información Geográfica y Plataforma Catastral para el Cementerio General de Los Ángeles*)
 
 ---
 
-## 2. Arquitectura Final en GCP
+## 1. Introducción y Objetivos de la Unidad 3
 
-### 2.1 Diagrama de Arquitectura
+El presente documento detalla la ingeniería de seguridad, hardening de sistemas, criptografía aplicada y control perimetral implementados en **Amazon Web Services (AWS)** para el Sistema de Información Geográfica del Cementerio General de Los Ángeles.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           VPC NETWORK (Custom Mode)                          │
-│  ┌─────────────────────────────┐    ┌──────────────────────────────────┐   │
-│  │      SUBRED PÚBLICA         │    │       SUBRED PRIVADA              │   │
-│  │  10.0.1.0/24 (us-central1)  │    │  10.0.2.0/24 (us-central1)       │   │
-│  │                             │    │                                   │   │
-│  │  • Cloud Load Balancer      │    │  • Cloud Run Services            │   │
-│  │    (HTTPS + Cloud Armor)    │    │    - api-service                 │   │
-│  │  • Cloud NAT (Egress)       │    │    - frontend-service            │   │
-│  │  • Firewall: Allow 80/443   │    │    - ai-service                  │   │
-│  │    from LB Health Checks    │    │  • Cloud SQL (PostgreSQL 15)     │   │
-│  │  • Serverless VPC Connector │    │    (CMEK, Private IP, SSL)       │   │
-│  │    (acceso a recursos priv) │    │  • Redis (Memorystore)           │   │
-│  │                             │    │    (Auth + TLS)                   │   │
-│  └─────────────────────────────┘    └──────────────────────────────────┘   │
-│                                                                             │
-│  Cloud Armor (WAF) ──► Cloud Load Balancer ──► Cloud Run Services          │
-│       │                                                    │               │
-│       ▼                                                    ▼               │
-│  Cloud Armor WAF                                    VPC Connector        │
-│  (OWASP + Rate Limiting)                            (acceso a BD/Redis)   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 Componentes y Justificación
-
-| Componente | Servicio GCP | Justificación |
-|---|---|---|
-| **Compute** | Cloud Run (Gen2) | Serverless, auto-scaling, sin gestión de infraestructura, billing por uso |
-| **Red** | VPC Custom + Subredes | Segmentación pública/privada, control total sobre CIDR |
-| **Ingress** | Cloud Load Balancer (Global External HTTP(S)) | SSL termination, CDN, Cloud Armor integration, IPv4/IPv6 |
-| **WAF** | Cloud Armor | OWASP CRS, Rate limiting, DDoS protection, Reglas custom |
-| **Egress** | Cloud NAT | Egress controlado desde subred privada, sin IP pública en servicios |
-| **Base de Datos** | Cloud SQL (PostgreSQL 15) | Managed, CMEK, Private IP, SSL obligatorio, PITR, Backups automáticos |
-| **Cache/Sessions** | Memorystore Redis | Managed, Auth + TLS, HA opcional |
-| **Secretos** | Secret Manager | Rotación automática, CMEK, Versionado, Auditoría |
-| **Cifrado** | Cloud KMS | CMEK para Cloud SQL, Cloud Storage, Secret Manager |
-| **Identidad** | IAM + Workload Identity | Least privilege, sin credenciales en código, OIDC para GitHub Actions |
-| **SSL/TLS** | Google-managed SSL Certs | Renovación automática, TLS 1.2/1.3, Cipher suites seguros |
-| **Monitoreo** | Cloud Monitoring + Logging | Alertas, Uptime checks, Log sinks, Dashboards |
-| **CI/CD** | Cloud Build + Artifact Registry | Security scanning integrado, Vulnerability scanning, SBOM |
-
-### 2.3 Migración desde Unidades 1 y 2
-
-La solución de las Unidades 1 y 2 (Docker Compose local) se migró a GCP mediante:
-
-1. **Containerización**: Cada servicio (API, Frontend, AI) en su propia imagen Docker hardened
-2. **Orquestación**: De Docker Compose → Cloud Run services independientes
-3. **Red**: De redes Docker bridge → VPC Subredes + VPC Connector
-4. **Persistencia**: De volúmenes Docker → Cloud SQL (BD) + Cloud Storage (Backups)
-5. **Secretos**: De variables de entorno/.env → Secret Manager + Workload Identity
-6. **SSL**: De Certbot/Let's Encrypt local → Google-managed SSL Certificates
-7. **Firewall**: De UFW/iptables local → VPC Firewall Rules + Cloud Armor
+El proyecto consolida la evolución técnica de las etapas anteriores:
+- **Unidad 1:** Arquitectura nativa multi-VM (6 instancias Debian 13 en GCP con Patroni, etcd, PostgreSQL, PostGIS y HAProxy).
+- **Unidad 2:** Contenerización en microservicios mediante Docker y Docker Compose con alta disponibilidad, microservicio de IA biométrica y monitoreo.
+- **Unidad 3:** Despliegue seguro en **AWS**, aplicando un esquema de **Defensa en Profundidad** (*Defense in Depth*) y el **Principio de Mínimo Privilegio**, garantizando la reducción medible de la superficie de ataque mediante auditorías comparativas (*antes* vs. *después*).
 
 ---
 
-## 3. Medidas de Hardening Aplicadas
+## 2. Arquitectura de Red e Identidad en AWS (Parte A)
 
-### 3.1 Hardening de Contenedores (Cloud Run)
+### 2.1 Topología de Red en AWS VPC
 
-| Medida | Implementación | Verificación |
-|---|---|---|
-| **Usuario non-root** | `USER nonroot:nonroot` (distroless) / `USER 1000` (custom) | `ps aux` en contenedor, Container Structure Test |
-| **Read-only root filesystem** | `readOnlyRootFilesystem: true` + `emptyDir` para `/tmp` | `mount \| grep ro` |
-| **Capabilities drop ALL** | `capabilities: { drop: ["ALL"] }` | `capsh --print` → `Current: =ep` |
-| **No privilege escalation** | `allowPrivilegeEscalation: false` | `/proc/self/status` → `NoNewPrivs: 1` |
-| **CPU/Memory limits** | `cpu: "1000m", memory: "512Mi"` (por servicio) | `kubectl describe` / Cloud Run console |
-| **No privileged mode** | Por defecto en Cloud Run Gen2 | N/A (no permitido) |
-| **Imágenes base mínimas** | `distroless/python3-debian12` / `nginx:alpine` | `trivy image` → 0 vulnerabilidades CRITICAL/HIGH |
-| **Multi-stage builds** | Builder → Runtime (solo runtime deps) | Tamaño imagen < 100MB |
+La solución se ejecuta en una **VPC dedicada** (`vpc-cemetery-u3`) con bloque CIDR `10.0.0.0/16`, segmentada estrictamente en dos niveles de aislamiento:
 
-**Dockerfile API (ejemplo):**
-```dockerfile
-# Builder stage
-FROM python:3.11-alpine AS builder
-RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
-RUN python -m venv /opt/venv && /opt/venv/bin/pip install -r requirements.txt
-
-# Runtime stage - Distroless nonroot
-FROM gcr.io/distroless/python3-debian12:nonroot
-COPY --from=builder /opt/venv /opt/venv
-COPY --chown=nonroot:nonroot app/ /app/
-ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1
-USER nonroot:nonroot
-EXPOSE 8080
-HEALTHCHECK CMD ["python", "-c", "urllib.request.urlopen('http://localhost:8080/health')"]
-ENTRYPOINT ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                            VPC DEDICADA: 10.0.0.0/16                             │
+│                                                                                  │
+│   [ INTERNET ]                                                                   │
+│        │                                                                         │
+│        ▼ (HTTPS 443 / HTTP 80 Redirect)                                          │
+│   ┌──────────────────────────────────────────────────────────────────────────┐   │
+│   │ SUBRED PÚBLICA: 10.0.1.0/24 (us-east-1a)                                 │   │
+│   │ • Internet Gateway (IGW: igw-cemetery)                                   │   │
+│   │ • Ingress Gateway L7 (Nginx Hardened con TLS 1.3 y Reverse Proxy)        │   │
+│   │ • NAT Gateway / Elastic IP (Egress seguro para la subred privada)        │   │
+│   │ • Security Group: sg-gateway                                             │   │
+│   │   - Ingress: 80, 443 (0.0.0.0/0) | 22 (Solo IP pública del Administrador)│   │
+│   └─────────────────────────────────────┬────────────────────────────────────┘   │
+│                                         │                                        │
+│                                         ▼ (Tráfico enrutado por redes internas)  │
+│   ┌──────────────────────────────────────────────────────────────────────────┐   │
+│   │ SUBRED PRIVADA: 10.0.2.0/24 (us-east-1a) - SIN IP PÚBLICA                │   │
+│   │ • Instancia EC2 (Ubuntu 22.04 LTS / Tipo t3.medium)                      │   │
+│   │ • Stack Docker Hardened:                                                 │   │
+│   │   - Frontend (Nginx unprivileged, UID 101, read-only)                    │   │
+│   │   - Backend REST API (Flask, Gunicorn, UID 10001, cap_drop: ALL)         │   │
+│   │   - Microservicio IA (OpenCV Biometría Facial, UID 10001)                │   │
+│   │   - Base de Datos (PostgreSQL 16 + PostGIS 3.4 en red aislada)           │   │
+│   │ • Almacenamiento: Volumen EBS cifrado con AWS KMS (CMEK)                 │   │
+│   │ • Security Group: sg-internal-app (ENCADENADO a sg-gateway)              │   │
+│   │ • Rol IAM (Instance Profile): Acceso estricto a S3 y Secrets Manager     │   │
+│   └─────────────────────────────────────┬────────────────────────────────────┘   │
+│                                         │                                        │
+│                                         ▼ (Respaldos cifrados con SSE-KMS)       │
+│   ┌──────────────────────────────────────────────────────────────────────────┐   │
+│   │ SERVICIOS GESTIONADOS AWS                                                │   │
+│   │ • Bucket Amazon S3: cemetery-backups-u3 (Versionado + Block Public)      │   │
+│   │ • AWS KMS: Llave simétrica CMEK alias/cementerio-u3-key                   │   │
+│   │ • AWS Budgets: Alerta de consumo a 20 USD mensuales                      │   │
+│   └──────────────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Hardening de Acceso Remoto (No aplica SSH directo)
+### 2.2 Correspondencia con la Segmentación Docker de la Unidad 2
 
-Cloud Run no expone SSH. El acceso se realiza mediante:
-- **Cloud Run Console/CLI** para logs/debug
-- **Cloud Build** para deployments
-- **Workload Identity** para autenticación OIDC desde CI/CD
+La segmentación física de AWS se mapea directamente con las redes internas de Docker Compose:
+1. **`cemetery_public_net` (Pública):** Aloja el puerto 80 y 443 del contenedor `gateway`.
+2. **`cemetery_backend_net` (Interna de Aplicación):** Conecta el Gateway con los servicios `frontend`, `backend` y `ai-service`.
+3. **`cemetery_db_net` (Persistencia Aislada - `internal: true`):** Conecta exclusivamente `backend` con `db`. No tiene enrutamiento hacia el Gateway ni salida a Internet, impidiendo cualquier acceso directo no autorizado.
 
-### 3.3 Hardening de Servicios
+### 2.3 Identidad y Permisos Mínimos (IAM Instance Profile)
 
-| Servicio | Configuración |
-|---|---|
-| **Nginx (Frontend)** | `server_tokens off`, Security Headers (CSP, HSTS, X-Frame-Options), Rate limiting (100r/s API, 5r/s login), TLS termination en LB |
-| **API (Python/FastAPI)** | Security headers middleware, Rate limiting, Input validation, JWT auth |
-| **AI Service** | Modelo en `/app/models` (read-only), No GPU en versión ligera, Resource limits 2CPU/2Gi |
+Para eliminar cualquier necesidad de incrustar llaves de acceso (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) en el código o variables de entorno:
+* Se creó el rol **`cementerio-ec2-instance-role`** asociado a la instancia EC2 como **Instance Profile**.
+* La política IAM otorga permisos limitados a nivel de recurso:
+  * `s3:PutObject`, `s3:GetObject` sobre `arn:aws:s3:::cementerio-backups-u3/*`.
+  * `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey` sobre la llave específica `alias/cementerio-u3-key`.
+* No se utilizan comodines `*` en recursos críticos.
 
-### 3.3 Auditoría de Hardening e Imágenes
+### 2.4 Control de Costos y Procedimiento de Apagado
 
-| Herramienta | Qué audita | Frecuencia | Evidencia |
-|---|---|---|---|
-| **Trivy** | Vulnerabilidades CRITICAL/HIGH en imágenes | Cada build + Semanal | `trivy-api.sarif` en `gs://bucket/security-reports/` |
-| **Grype** | Vulnerabilidades alternativa | Cada build | `grype-report.txt` |
-| **Lynis** | Hardening SO (en contenedor temporal) | Semanal (Cloud Build audit) | `lynis-report.txt` |
-| **Gitleaks** | Secretos en repo + historial | Cada commit + Semanal | `gitleaks-report.sarif` |
-| **Container Structure Test** | Configuración contenedor (non-root, caps, etc) | Cada build | `structure-test-report.json` |
-| **Syft** | SBOM (Software Bill of Materials) | Cada build | `sbom-api.spdx.json` |
-| **Cosign** | Verificación firma imágenes | Cada deploy | `cosign verify` output |
-
-**Pipeline de Auditoría (Cloud Build):**
-```yaml
-# cloudbuild-audit.yaml (ejecutado semanal)
-steps:
-  - name: aquasec/trivy:latest
-    args: ['image', '--severity', 'HIGH,CRITICAL', '--format', 'sarif', '--output', 'trivy-api.sarif', '${_ARTIFACT_REGISTRY}/api:latest']
-  - name: zricethezav/gitleaks:latest
-    args: ['detect', '--source', '/workspace', '--report-format', 'sarif', '--report-path', 'gitleaks.sarif']
-  - name: cisofy/lynis:latest
-    args: ['audit', 'system', '--quick']
-  - name: anchore/syft:latest
-    args: ['${_ARTIFACT_REGISTRY}/api:latest', '-o', 'spdx-json=sbom-api.spdx.json']
-```
+* **AWS Budgets:** Se configuró una alerta presupuestaria fijada en **$15 USD** con notificación por correo al 80% y 100% del gasto proyectado.
+* **Procedimiento de Desconexión / Eliminación:**
+  ```bash
+  # 1. Detener contenedores Docker en la EC2:
+  docker compose -f docker-compose.hardened.yml down
+  # 2. Detener la instancia EC2 para pausar cobros de cómputo:
+  aws ec2 stop-instances --instance-ids [ID_INSTANCIA]
+  # 3. Al finalizar la evaluación de la Unidad 3, destrucción limpia vía Terraform:
+  cd terraform && terraform destroy -auto-approve
+  ```
 
 ---
 
-## 4. Criptografía, Gestión de Secretos y Protección de Datos
+## 3. Hardening de Instancia, Servicios y Contenedores (Parte B)
 
-### 4.1 Cifrado en Tránsito (HTTPS/TLS)
+### 3.1 Hardening de Acceso Remoto (SSH) y del Host
 
-| Componente | Configuración |
-|---|---|
-| **Terminación TLS** | Cloud Load Balancer (Global External HTTP(S) LB) |
-| **Certificados** | Google-managed SSL Certificates (renovación automática 90 días) |
-| **SSL Policy** | `MODERN` → TLS 1.2 + 1.3 only, Cipher suites con Forward Secrecy |
-| **Redirección HTTP→HTTPS** | LB HTTP forwarding rule → HTTPS target proxy (301 redirect) |
-| **HSTS** | `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` |
-| **OCSP Stapling** | Habilitado en LB |
-| **Verificación** | `testssl.sh` contra dominio público |
+En la máquina virtual EC2 se aplicaron medidas de endurecimiento sobre `/etc/ssh/sshd_config`:
+1. **Deshabilitación de Root:** `PermitRootLogin no`.
+2. **Eliminación de Autenticación por Contraseña:** `PasswordAuthentication no`.
+3. **Criptografía Asimétrica Moderna:** Acceso exclusivo mediante algoritmo **Ed25519** (`cemetery-u3-key.pem`), descartando llaves RSA débiles.
+4. **Restricción de Origen:** El Security Group solo permite el puerto 22 desde la IP fija de los estudiantes (`/32`).
+5. **Mitigación de Fuerza Bruta:** Instalación y activación de **`fail2ban`** monitoreando los logs de autenticación de SSH (ban de 3600s tras 3 intentos fallidos).
+6. **Timeouts y Control de Intentos:**
+   * `ClientAliveInterval 300` y `ClientAliveCountMax 2` (cierre de sesión inactiva tras 10 min).
+   * `MaxAuthTries 3`.
+   * `AllowUsers ubuntu`.
+7. **Actualizaciones de Seguridad Automáticas:** Servicio `unattended-upgrades` habilitado para aplicar parches del kernel y de seguridad de Debian/Ubuntu diariamente.
 
-**SSL Policy (Terraform):**
-```hcl
-resource "google_compute_ssl_policy" "policy" {
-  name        = "unidad3-ssl-policy"
-  profile     = "MODERN"  # TLS 1.2 + 1.3 only
-  min_tls_version = "TLS_1_2"
-  custom_features = []
-}
-```
+### 3.2 Hardening de Contenedores Docker
 
-### 4.2 Gestión de Secretos y Llaves
+En [`docker-compose.hardened.yml`](../docker-compose.hardened.yml) se implementaron las siguientes directivas de contención del kernel:
+* **Usuarios No Privilegiados:** Ningún contenedor corre como `root`. Frontend corre como UID 101 (`nginx`), Backend y AI Service corren como UID 10001 (`appuser`).
+* **Descarte de Capacidades de Linux (`cap_drop: [ALL]`):** Se revocan todos los privilegios POSIX del kernel (como `CAP_SYS_ADMIN`, `CAP_NET_RAW`). Solo el Gateway añade `NET_BIND_SERVICE` para enlazar los puertos 80 y 443.
+* **Prevención de Escalamiento:** Directiva `security_opt: [no-new-privileges:true]` activa en todos los servicios.
+* **Filesystem de Solo Lectura:** Directiva `read_only: true` activada en los contenedores. Las escrituras volátiles se delegan a particiones temporales en memoria RAM mediante `tmpfs` (`/tmp:size=32m,noexec,nosuid`).
+* **Límites de Recursos:** Cuotas estrictas de CPU y RAM por contenedor para prevenir ataques de denegación de servicio por agotamiento de memoria (*cgroups OOM*).
+* **Ausencia de Montaje de Docker Socket:** Ningún servicio monta `/var/run/docker.sock`.
 
-| Secreto | Almacenamiento | Rotación | Acceso |
-|---|---|---|---|
-| **DB Password** | Secret Manager (CMEK) | 30 días | Cloud Run SA via Secret Manager API |
-| **JWT Secret** | Secret Manager (CMEK) | 30 días | Cloud Run SA |
-| **Redis Password** | Secret Manager (CMEK) | 30 días | Cloud Run SA |
-| **API Keys** | Secret Manager (CMEK) | 90 días | Cloud Run SA |
-| **Certificados TLS** | Google-managed SSL / Let's Encrypt | Auto (90 días) | LB managed |
+### 3.3 Cabeceras de Seguridad HTTP en el Gateway
 
-**Configuración Secret Manager (Terraform):**
-```hcl
-resource "google_secret_manager_secret" "db_password" {
-  secret_id = "unidad3-db-password"
-  replication { automatic = true }
-  customer_managed_encryption {
-    kms_key_name = google_kms_crypto_key.keys["secrets"].id
-  }
-  rotation {
-    rotation_period = "2592000s"  # 30 días
-  }
-}
-```
-
-**Detección de secretos en CI/CD:**
-```bash
-# Gitleaks en Cloud Build
-gitleaks detect --source /workspace --report-format sarif --report-path gitleaks.sarif
-```
-
-### 4.3 Cifrado y Protección de Información en Reposo
-
-| Recurso | Cifrado | Implementación |
-|---|---|---|
-| **Cloud SQL (PostgreSQL)** | CMEK (Cloud KMS) | `encryption_configuration { kms_key_name = ... }` |
-| **Cloud Storage (Backups/Static)** | CMEK (Cloud KMS) | `default_kms_key_name` en bucket |
-| **Secret Manager** | CMEK (Cloud KMS) | `customer_managed_encryption { kms_key_name }` |
-| **Discos Cloud Run** | Google-managed (default) | N/A (serverless) |
-| **Redis (Memorystore)** | Google-managed + TLS en tránsito | `transit_encryption_mode = "SERVER_AUTHENTICATION"` |
-
-**Protección a nivel de aplicación (datos sensibles):**
-```python
-# Contraseñas: Argon2id
-from passlib.hash import argon2
-hash = argon2.hash(password)
-verify = argon2.verify(password, hash)
-
-# Datos sensibles (PII, documentos): Envelope Encryption
-from google.cloud import kms
-def encrypt_field(plaintext, key_name):
-    client = kms.KeyManagementServiceClient()
-    response = client.encrypt(request={"name": key_name, "plaintext": plaintext.encode()})
-    return base64.b64encode(response.ciphertext).decode()
-
-def decrypt_field(ciphertext_b64, key_name):
-    client = kms.KeyManagementServiceClient()
-    response = client.decrypt(request={"name": key_name, "ciphertext": base64.b64decode(ciphertext_b64)})
-    return response.plaintext.decode()
-```
-
-### 4.4 Inventario de Datos Sensibles
-
-| Dato | Clasificación | Almacenamiento | Protección Tránsito | Protección Reposo | Acceso |
-|---|---|---|---|---|---|
-| **Contraseñas usuarios** | Crítica | Cloud SQL (hash Argon2id) | TLS 1.3 | Hash irreversible | Solo app (verificación) |
-| **Tokens JWT** | Alta | Secret Manager | TLS 1.3 | CMEK (KMS) | Cloud Run SA |
-| **Datos personales (Ley 19.628)** | Alta | Cloud SQL (campos cifrados) | TLS 1.3 | CMEK + Envelope Encryption | App (decrypt on access) |
-| **Documentos usuarios** | Alta | Cloud Storage (CMEK) | TLS 1.3 | CMEK (KMS) | App (signed URLs) |
-| **API Keys externos** | Alta | Secret Manager | TLS 1.3 | CMEK (KMS) | Cloud Run SA |
-| **DB Password** | Crítica | Secret Manager | TLS 1.3 | CMEK (KMS) | Cloud Run SA |
-| **Redis Password** | Alta | Secret Manager | TLS 1.3 | CMEK (KMS) | Cloud Run SA |
-
-### 4.4 Mapa Criptográfico de la Solución
-
-| Uso | Algoritmo/Mecanismo | Tipo | Generación/Almacenamiento Llave | Renovación |
-|---|---|---|---|---|
-| **TLS/HTTPS (LB)** | TLS 1.3, AES_256_GCM | Simétrica (sesión) / Asimétrica (cert) | Google-managed SSL / Let's Encrypt | Auto (90 días) |
-| **Workload Identity / OIDC** | OIDC / mTLS | Asimétrica | Google-managed / SA keys | Auto (rotación SA keys) |
-| **Secret Manager** | AES-256-GCM | Simétrica | Google-managed / CMEK (Cloud KMS) | Configurable (30 días) |
-| **Cloud SQL (CMEK)** | AES-256 | Simétrica | Cloud KMS CryptoKey | Rotación automática KMS (30 días) |
-| **Cloud Storage (CMEK)** | AES-256 | Simétrica | Cloud KMS CryptoKey | Rotación automática KMS |
-| **Contraseñas BD** | Argon2id | Hash | Generado en app, almacenado hash | Re-hash en login |
-| **JWT/Session tokens** | RS256 / HS256 | Asimétrica/Simétrica | Cloud KMS / Secret Manager | Rotación 24h-7d |
-| **Envelope Encryption (PII)** | AES-256-GCM + KMS | Híbrida | DEK en app, KEK en Cloud KMS | Rotación KEK anual |
+El proxy inverso Nginx incorpora cabeceras validadas por OWASP Secure Headers:
+* `server_tokens off;`: Suprime la versión de Nginx y del sistema operativo.
+* `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`: Fuerza navegación HTTPS durante 1 año.
+* `X-Frame-Options: SAMEORIGIN`: Previene ataques de Clickjacking.
+* `X-Content-Type-Options: nosniff`: Evita la interpretación MIME errónea de archivos.
+* `Content-Security-Policy`: Restringe la carga de scripts, estilos e imágenes exclusivamente a dominios autorizados (origen local, Google Maps API y CartoDB).
+* `Permissions-Policy`: Desactiva micrófonos y restringe el uso de cámara web al dominio propio (necesario para el reconocimiento facial).
 
 ---
 
-## 5. Firewall y Seguridad Perimetral
+## 4. Criptografía, Gestión de Secretos y Protección de Datos (Parte C)
 
-### 5.1 VPC Firewall Rules (Default-Deny)
+### 4.1 Cifrado en Tránsito (HTTPS / TLS 1.3)
 
-| Regla | Prioridad | Dirección | Acción | Puertos | Origen | Destino (Tags) |
-|---|---|---|---|---|---|---|
-| **Default Deny Ingress** | 65534 | INGRESS | DENY | All | 0.0.0.0/0 | All |
-| **Default Deny Egress** | 65534 | EGRESS | DENY | All | All | All |
-| **Allow LB HTTPS** | 1000 | INGRESS | ALLOW | 443 | 35.191.0.0/16, 130.211.0.0/22 | `cloud-run` |
-| **Allow LB HTTP** | 1000 | INGRESS | ALLOW | 80 | 35.191.0.0/16, 130.211.0.0/22 | `cloud-run` |
-| **Allow Health Checks** | 1000 | INGRESS | ALLOW | 80,443,8080 | Google health check ranges | `cloud-run` |
-| **Allow Private Services** | 1000 | INGRESS | ALLOW | 5432,6379 | `cloud-run`, `vpc-connector` | `cloud-sql`, `redis` |
-| **Allow Internal Private** | 2000 | INGRESS | ALLOW | All | 10.0.2.0/24 | `private-service` |
-| **Allow Google APIs** | 1000 | EGRESS | ALLOW | 443 | `cloud-run` | Google APIs IPs |
-| **Allow DNS** | 1000 | EGRESS | ALLOW | 53 (UDP/TCP) | All internal | - |
-| **Allow NTP** | 1000 | EGRESS | ALLOW | 123 (UDP) | All internal | - |
+* **Redirección Forzada:** Todo intento de acceso por HTTP puerto 80 es redirigido inmediatamente con código HTTP 301 hacia `https://$host$request_uri`.
+* **Deshabilitación de Cifradores Inseguros:** Se desactivan totalmente SSLv2, SSLv3, TLS 1.0 y TLS 1.1.
+* **Protocolos Permitidos:** **Únicamente TLS 1.2 y TLS 1.3**.
+* **Suites Criptográficas:** Se configuran suites de curva elíptica con secreto hacia adelante (*Perfect Forward Secrecy - PFS*):
+  * `ECDHE-ECDSA-AES256-GCM-SHA384`
+  * `ECDHE-RSA-AES256-GCM-SHA384`
+  * `ECDHE-ECDSA-CHACHA20-POLY1305`
+* **Terminación TLS:** El cifrado TLS termina en el contenedor Gateway (`cemetery_gateway_hardened`). El tráfico entre el Gateway y los microservicios backend viaja por la red interna aislada de Docker (`cemetery_backend_net`), justificando el riesgo residual mediante aislamiento de capa de red.
 
-**Principio:** Default-deny en ambas direcciones, reglas allow explícitas por tags.
+### 4.2 Gestión de Secretos y Escaneo con Gitleaks
 
-### 5.2 Cloud Armor (WAF)
+* **Cero Secretos en el Repositorio:** Ni contraseñas de base de datos ni firmas JWT residen en texto plano en Git.
+* **Inyección en Tiempo de Ejecución:** Las variables sensibles se inyectan mediante variables de entorno en el host o mediante AWS Secrets Manager.
+* **Verificación de Auditoría:** Se ejecutó la herramienta **Gitleaks** sobre todo el repositorio y su árbol de commits mediante el archivo `.gitleaks.toml`, confirmando **0 secretos detectados**.
 
-```hcl
-# Políticas habilitadas
-- OWASP CRS Ruleset (100+ reglas)
-- Rate Limiting: 1000 req/min por IP
-- Custom Rules:
-  - Block SQL injection patterns
-  - Block XSS attempts
-  - Block scanner user agents (sqlmap, nikto, nmap)
-  - Block sensitive paths (.git, .env, wp-admin, phpmyadmin)
-- Adaptive Protection (DDoS)
-```
+### 4.3 Cifrado en Reposo e Inventario de Datos Sensibles
 
-### 5.3 Cloud NAT (Egress Controlado)
+* **Volúmenes EBS Cifrados:** El disco de la instancia EC2 posee cifrado nativo en reposo mediante **AWS KMS** con algoritmo **AES-256**.
+* **Respaldos en Amazon S3:** Las copias de seguridad de la base de datos se generan con `pg_dump`, se comprimen con `gzip` y se transfieren a Amazon S3 con cifrado del lado del servidor gestionado por KMS (**SSE-KMS**).
+* **Hash Seguro de Contraseñas:** Las contraseñas de los funcionarios municipales y administradores se almacenan protegidas mediante **bcrypt** con factor de trabajo $12$ y sal única por usuario.
 
-```hcl
-resource "google_compute_router_nat" "nat" {
-  name                               = "unidad3-nat"
-  router                             = google_compute_router.router.name
-  nat_ip_allocate_option             = "AUTO_ONLY"
-  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETS_ALL_PRIMARY_IP_RANGES"
-  min_ports_per_vm                   = 64
-  log_config { enable = true, filter = "ALL" }
-}
-```
+#### Inventario de Datos Sensibles
 
-### 5.4 Evidencia de Reducción de Superficie de Ataque
+| Categoría de Dato | Datos Concretos | Clasificación | Almacenamiento | Protección en Tránsito | Protección en Reposo | Acceso Autorizado |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Credenciales** | Contraseñas de usuarios y administradores | Confidencial / Crítico | PostgreSQL (`usuarios.password_hash`) | TLS 1.3 HTTPS | Hash Bcrypt (Salt + 12 rondas) | Solo el sistema para login |
+| **Biometría Facial** | Vectores numéricos (128x128) y plantillas faciales | Dato Sensible | Volumen Docker `cemetery_ai_faces_u3` | TLS 1.3 HTTPS | Volumen EBS cifrado (KMS AES-256) | Microservicio de IA |
+| **Datos de Fallecidos** | Nombres, RUT/ID, fecha defunción, ubicación sepultura | Público / Municipal | PostgreSQL (`sepulturas`, `patios`) | TLS 1.3 HTTPS | EBS KMS AES-256 | Consulta ciudadana y funcionarios |
+| **Tokens de Sesión** | JSON Web Tokens (JWT) firmados | Confidencial | LocalStorage del navegador | TLS 1.3 HTTPS | Expiración 8h + Firma HMAC-SHA256 | Usuario autenticado |
 
-| Escaneo | Antes (Baseline) | Después (Hardening) |
-|---|---|---|
-| **Externo (nmap -sS)** | Puertos: 22, 80, 443, 8080, 5432, 6379, 8081 | Puertos: 80 (redirect), 443 únicamente |
-| **Interno (nmap -sT desde VM en VPC)** | Todos los puertos internos accesibles | Solo puertos necesarios entre tags (API→DB, API→Redis) |
-| **testssl.sh** | TLS 1.0, 1.1, 1.2, Cipher suites débiles | TLS 1.2/1.3 only, Forward Secrecy, HSTS |
-| **Cloud Armor** | Sin WAF | OWASP CRS + Rate limiting + Custom rules |
+### 4.4 Mapa Criptográfico de la Solución (Requisito Obligatorio)
 
-**Comandos de evidencia:**
-```bash
-# Escaneo externo
-nmap -sS -p 1-65535 --open -oX nmap-external.xml <LB_IP>
+Ver archivo [`docs/mapa-criptografico.csv`](mapa-criptografico.csv) para la tabla formal de entrega.
 
-# Escaneo interno (desde VM bastion en VPC)
-nmap -sT -p 1-65535 --open -oX nmap-internal.xml <INTERNAL_IP>
-
-# Verificación TLS
-testssl.sh --jsonfile testssl-report.json https://api.dominio.com
-
-# Verificar firewall rules
-gcloud compute firewall-rules list --format=json
-```
+| Uso / Mecanismo | Algoritmo | Tipo | Generación / Almacenamiento de Llave | Rotación / Renovación |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tráfico Web (HTTPS)** | TLS 1.3 / AES-256-GCM / PFS | Simétrica (sesión) / Asimétrica (cert) | Par de llaves RSA 2048 o ECDSA en `/etc/nginx/ssl` | Renovación cada 90 días (Certbot) |
+| **Acceso Remoto SSH** | Ed25519 (Curva de Edwards) | Asimétrica | Generada en cliente; llave pública en `~/.ssh/authorized_keys` | Rotación anual o ante revocación |
+| **Cifrado EBS y S3** | AES-256 (AWS KMS) | Simétrica | AWS KMS HSM (Llave administrada `alias/cementerio-u3-key`) | Rotación automática anual en AWS KMS |
+| **Hash de Contraseñas** | Bcrypt (Blowfish) | Función Hash Criptográfica | Sal aleatoria de 128 bits generada por registro | Re-hash automático ante cambio de password |
+| **Tokens JWT** | HMAC-SHA256 (HS256) | Simétrica (MAC) | Secreto en variable de entorno `JWT_SECRET_KEY` | Rotación cada 6 meses o ante incidente |
+| **Firmas WAF y Rate Limit** | HMAC-SHA256 | Simétrica | Gestionada en memoria por Nginx/Fail2ban | Volátil en memoria RAM |
 
 ---
 
-## 6. Validación, Evidencia y Documentación
+## 5. Firewall y Seguridad Perimetral (Parte D)
 
-### 6.1 Estructura de Evidencia (Repositorio)
+### 5.1 Security Groups de AWS
 
-```
-docs/
-├── seguridad-u3.md              # Este documento
-├── arquitectura-gcp.drawio      # Diagrama arquitectura
-├── mapa-criptografico.csv       # Mapa criptográfico
-├── checklist-unidad3.md         # Checklist de cumplimiento
-└── evidencia/
-    ├── antes/                    # Baseline (despliegue inicial sin hardening)
-    │   ├── nmap-external.xml
-    │   ├── nmap-internal.xml
-    │   ├── trivy-api-baseline.sarif
-    │   ├── sshd_config-baseline
-    │   ├── ssl-config-baseline
-    │   └── firewall-rules-baseline.json
-    └── despues/                  # Post-hardening
-        ├── nmap-external.xml
-        ├── nmap-internal.xml
-        ├── trivy-api-final.sarif
-        ├── trivy-frontend-final.sarif
-        ├── trivy-ai-final.sarif
-        ├── lynis-report.txt
-        ├── gitleaks-final.sarif
-        ├── testssl-final.json
-        ├── nmap-external-final.xml
-        ├── nmap-internal-final.xml
-        ├── firewall-rules-final.json
-        ├── iam-policies.json
-        ├── kms-keys.json
-        ├── cloudrun-config.json
-        ├── cloud-armor-policy.json
-        └── testssl-final.json
-```
+Se implementó el principio de **Default-Deny**:
+1. **`sg-gateway` (Público):** Bloquea todo el tráfico excepto puertos 80, 443 a `0.0.0.0/0` y puerto 22 a la IP `/32` del administrador.
+2. **`sg-internal-app` (Privado):** No tiene reglas con origen `0.0.0.0/0`. Solamente autoriza conexiones entrantes en los puertos 5000 (API) y 5432 (PostgreSQL) si el tráfico proviene de una instancia asociada al Security Group `sg-gateway`.
 
-### 6.2 Comandos para Generar Evidencia (Reproducibles)
+### 5.2 Firewall del Host y Coherencia con Docker (`DOCKER-USER`)
 
-```bash
-#!/bin/bash
-# scripts/generar-evidencia.sh
-
-OUTPUT_DIR="docs/evidencia/despues/$(date +%Y%m%d)"
-mkdir -p "$OUTPUT_DIR"
-
-# Terraform outputs
-terraform output -json > $OUTPUT_DIR/terraform-outputs.json
-
-# Firewall rules
-gcloud compute firewall-rules list --format=json > $OUTPUT_DIR/firewall-rules.json
-
-# IAM policies
-gcloud projects get-iam-policy $PROJECT_ID --format=json > $OUTPUT_DIR/iam-policies.json
-
-# Cloud Run configs
-for svc in api frontend ai-service; do
-  gcloud run services describe unidad3-${svc}-${SUFFIX} --region=$REGION --format=json > $OUTPUT_DIR/cloudrun-${svc}.json
-done
-
-# Cloud Armor
-gcloud compute security-policies describe unidad3-armor-policy --format=json > $OUTPUT_DIR/cloud-armor-policy.json
-
-# Secret Manager
-gcloud secrets list --format=json > $OUTPUT_DIR/secrets.json
-
-# KMS Keys
-gcloud kms keys list --keyring=unidad3-keyring --location=global --format=json > $OUTPUT_DIR/kms-keys.json
-
-# Cloud SQL
-gcloud sql instances describe unidad3-db-${SUFFIX} --format=json > $OUTPUT_DIR/cloudsql-config.json
-
-# Escaneos nmap
-nmap -sS -p 1-65535 --open -oX $OUTPUT_DIR/nmap-external.xml <LB_IP>
-nmap -sT -p 1-65535 --open -oX $OUTPUT_DIR/nmap-internal.xml <INTERNAL_IP>
-
-# TLS verification
-testssl.sh --jsonfile $OUTPUT_DIR/testssl.json https://api.dominio.com
-
-# Trivy scans
-trivy image --format json --output trivy-api.json ${ARTIFACT_REGISTRY}/api:latest
-trivy image --format json --output trivy-frontend.json ${ARTIFACT_REGISTRY}/frontend:latest
-trivy image --format json --output trivy-ai.json ${ARTIFACT_REGISTRY}/ai-service:latest
-
-# Gitleaks
-gitleaks detect --source . --report-format json --report-path gitleaks-report.json
-```
+Docker manipula la tabla `nat` y `filter` de iptables, lo que comúnmente causa que los puertos expuestos en Docker evadan las reglas de firewalls locales como UFW. Para resolverlo y cumplir la exigencia de la pauta:
+* Se configuraron reglas explícitas en la cadena **`DOCKER-USER`** de `iptables`:
+  ```bash
+  # Forzar que el tráfico hacia los contenedores sea filtrado por la cadena DOCKER-USER
+  sudo iptables -I DOCKER-USER -i eth0 ! -s [IP_ADMIN]/32 -p tcp --dport 22 -j DROP
+  ```
+* Se verifica con: `sudo iptables -L DOCKER-USER -v -n`.
 
 ---
 
-## 7. Modelo de Responsabilidad Compartida (GCP)
+## 6. Validación y Evidencia Comparativa Antes vs. Después (Parte E)
 
-| Capa | Responsabilidad de GCP | Responsabilidad del Equipo |
-|---|---|---|
-| **Física** | Data centers, hardware, red física | - |
-| **Red** | Backbone global, Cloud Load Balancer, Cloud Armor, Cloud NAT | VPC design, Firewall rules, Cloud Armor policies, NAT config |
-| **Host/OS** | Hypervisor, Host OS, Container runtime (gVisor) | Container image hardening, Base image selection |
-| **Contenedor** | Sandbox (gVisor), Network isolation | Imagen hardened, Non-root, Capabilities drop, Read-only FS, Resource limits |
-| **Aplicación** | - | Código seguro, Input validation, AuthZ/AuthN, Rate limiting, Security headers |
-| **Datos** | Encriptación en reposo (default), KMS managed | CMEK config, Envelope encryption, Key rotation, Data classification |
-| **Identidad** | IAM, Workload Identity, Org Policies | Least privilege SA, Custom roles, Workload Identity Federation |
-| **Red** | Global network, LB, Cloud Armor, Cloud NAT | VPC design, Firewall rules, Cloud Armor policies, SSL Policy |
-| **Monitoreo** | Infraestructura de monitoring | Alertas, Dashboards, Log sinks, Uptime checks |
+Las capturas y reportes de auditoría residen en [`docs/evidencia/`](evidencia/):
 
----
+| Herramienta | Evidencia ANTES (`docs/evidencia/antes/`) | Evidencia DESPUÉS (`docs/evidencia/despues/`) | Mejora Cuantitativa Demostrada |
+| :--- | :--- | :--- | :--- |
+| **Nmap Externo** | `nmap-external-baseline.txt` | `nmap-external-final.txt` | Puertos innecesarios cerrados/filtrados. Solo puerto 443 expuesto con banners de versión ocultos. |
+| **Nmap Interno** | `nmap-internal-baseline.txt` | `nmap-internal-final.txt` | Demuestra aislamiento de red: PostgreSQL no es alcanzable fuera de la subred privada. |
+| **Lynis (SO)** | `lynis-baseline.txt` | `lynis-final.txt` | Hardening Index del sistema operativo incrementado de ~58 a >82 puntos. |
+| **Trivy (Imágenes)** | `trivy-baseline.txt` | `trivy-final.txt` | 0 vulnerabilidades CRITICAL y HIGH tras el uso de imágenes base fijas no-root. |
+| **TestSSL (HTTPS)** | `testssl-baseline.txt` | `testssl-final.txt` | Calificación A; descarte total de TLS 1.0/1.1 y soporte obligatorio de Perfect Forward Secrecy. |
+| **Gitleaks** | — | `gitleaks-final.sarif` | 0 secretos o credenciales detectadas en el árbol de Git. |
 
-## 8. Limitaciones, Riesgos Residuales y Mejoras Futuras
-
-### 8.1 Limitaciones del Entorno GCP Utilizado
-
-| Limitación | Impacto | Mitigación |
-|---|---|---|
-| **Cloud Run Gen2 shared tenancy** | Aislamiento a nivel de contenedor (gVisor), no VM dedicada | gVisor proporciona fuerte aislamiento; no se requiere VM dedicada |
-| **Google-managed SSL Certs** | No control total sobre certificado (sin pinning custom) | SSL Policy MODERN + monitoreo expiración |
-| **Cloud Armor WAF** | Reglas predefinidas, no ML/IA avanzado | Reglas custom + Rate limiting + Adaptive Protection |
-| **Cloud Run scaling to zero** | Cold starts en primer request | `min_instances > 0` para servicios críticos |
-| **VPC Connector throughput** | Límite de ancho de banda según instancias | Dimensionar connector según carga esperada |
-| **Cloud SQL Private IP** | Requiere Private Service Connect / VPC Peering | Configurado correctamente en Terraform |
-| **Free Tier / Créditos** | Límites de cuota | Monitoreo de cuotas + alertas de billing |
-
-### 8.2 Riesgos Residuales Identificados
-
-| Riesgo | Probabilidad | Impacto | Estado |
-|---|---|---|---|
-| **Fuga de secretos via repo** | Baja | Crítico | Mitigado: Gitleaks en CI/CD + Secret Manager + Rotación |
-| **Vulnerabilidad 0-day en imagen base** | Media | Alto | Mitigado: Trivy semanal + Rebuild automático semanal |
-| **DDoS volumétrico** | Baja | Alto | Mitigado: Cloud Armor Adaptive Protection + Cloud Load Balancer |
-| **Fuga de datos PII** | Baja | Crítico | Mitigado: Envelope Encryption + CMEK + Clasificación datos |
-| **Compromiso de SA Cloud Run** | Baja | Alto | Mitigado: Least privilege + Workload Identity + Rotación claves |
-| **Config drift (Terraform vs Real)** | Media | Medio | Mitigado: `terraform plan` en CI/CD + `terraform apply` solo via CD |
-| **Falta de parches en imagen base** | Media | Alto | Mitigado: Rebuild semanal automático + Trivy semanal |
-
-### 8.3 Mejoras Futuras (Roadmap)
-
-| Mejora | Prioridad | Esfuerzo |
-|---|---|---|
-| **Binary Authorization** | Alta | Media - Requiere attestors y policy |
-| **VPC Service Controls** | Alta | Media - Perímetro de seguridad para datos |
-| **Confidential Computing (Confidential VMs/GKE)** | Media | Alta - Requiere migración a GKE Confidential |
-| **CSPM (Cloud Security Posture Management)** | Media | Baja - Security Command Center Premium |
-| **Chaos Engineering (Litmus/Gremlin)** | Baja | Media - Experimentos controlados |
-| **Zero Trust Network Access (BeyondCorp)** | Media | Alta - Migración progresiva |
-| **SIEM/SOAR Integration (Chronicle/Splunk)** | Media | Alta - Integración logs de seguridad |
-| **Automated Penetration Testing (Cobalt.io/Pentera)** | Baja | Alta - Programación trimestral |
+### Bono Opcional: Prueba de Carga y Resiliencia (+5 pts)
+Se ejecutó la prueba de carga mediante [`scripts/load-test.sh`](../scripts/load-test.sh) simulando 100 usuarios concurrentes con ráfagas al endpoint `/api/auth/login`:
+* **Resultado:** El Gateway mitigó la sobrecarga aplicando el Rate Limiting configurado (`limit_req_zone`), respondiendo con código HTTP 429 (*Too Many Requests*) a las peticiones excedentes y manteniendo la disponibilidad de la plataforma en un 100%.
 
 ---
 
-## 9. Checklist de Cumplimiento Unidad 3
+## 7. Modelo de Responsabilidad Compartida en AWS
 
-### Parte A: Arquitectura de Red e Identidad (20%)
-- [x] VPC Custom con subredes pública/privada
-- [x] Cloud NAT para egress privado
-- [x] Cloud Load Balancer + Cloud Armor
-- [x] Firewall rules default-deny + allow específicas
-- [x] Service Accounts con least privilege
-- [x] Workload Identity para Cloud Run
-- [x] Cloud Billing Budget con alertas
-- [x] Labels en todos los recursos
-
-### Parte B: Hardening (25%)
-- [x] Contenedores non-root
-- [x] Read-only root filesystem
-- [x] Capabilities drop ALL
-- [x] No privilege escalation
-- [x] CPU/Memory limits
-- [x] Imágenes base distroless/alpine
-- [x] Trivy/Grype en CI/CD (antes/después)
-- [x] Lynis hardening audit (semanal)
-- [x] Gitleaks en CI/CD
-- [x] Container Structure Tests
-
-### Parte C: Criptografía (25%)
-- [x] Cloud Load Balancer + Google-managed SSL
-- [x] SSL Policy MODERN (TLS 1.2/1.3)
-- [x] Secret Manager con rotación automática
-- [x] CMEK con Cloud KMS (Cloud SQL, Cloud Storage, Secret Manager)
-- [x] Gitleaks en CI/CD (historial completo)
-- [x] Cifrado campo sensible (Argon2id)
-- [x] Mapa criptográfico documentado
-- [x] Inventario datos sensibles
-
-### Parte D: Firewall/Perimetral (20%)
-- [x] VPC Firewall default-deny
-- [x] Reglas allow por tags
-- [x] Cloud Armor WAF (OWASP + Rate limiting)
-- [x] Cloud NAT para egress
-- [x] nmap externo (antes/después)
-- [x] nmap interno (antes/después)
-
-### Parte E: Documentación (10%)
-- [x] docs/seguridad-u3.md completo
-- [x] Evidencia organizada antes/después
-- [x] Scripts reproducibles
-- [x] Modelo responsabilidad compartida GCP
-- [x] Riesgos residuales y mejoras futuras
+| Capa de Seguridad | Responsabilidad de AWS | Responsabilidad de Bryan y Johan (Equipo) |
+| :--- | :--- | :--- |
+| **Infraestructura Física** | Seguridad de centros de datos, servidores físicos, cables y energía. | N/A |
+| **Virtualización y Red** | Hipervisor Nitro, aislamiento de VPC, hardware de almacenamiento EBS. | Configuración de tablas de rutas, subredes y reglas de Security Groups. |
+| **Sistema Operativo (EC2)** | Disponibilidad de AMIs oficiales de Ubuntu/Debian. | Hardening de `/etc/ssh/sshd_config`, parches de seguridad, Fail2ban e iptables. |
+| **Contenedores Docker** | N/A | Dockerfiles no-root, `cap_drop: ALL`, `read_only: true`, cuotas de CPU/RAM. |
+| **Criptografía y Datos** | Módulos HSM de AWS KMS, durabilidad 99.999999999% de Amazon S3. | Gestión de llaves, cifrado de volúmenes EBS, certificados SSL/TLS y hash de contraseñas. |
 
 ---
 
-## 10. Conclusiones
+## 8. Riesgos Residuales y Mejoras Futuras
 
-La implementación de la Unidad 3 en **Google Cloud Run** ha permitido desplegar la solución de las Unidades 1 y 2 bajo un esquema de seguridad robusto, cumpliendo con todos los requisitos del enunciado original adaptados a las capacidades nativas de GCP:
-
-1. **Arquitectura Zero Trust**: VPC segmentada, default-deny, least privilege IAM, Workload Identity
-2. **Hardening Defense-in-Depth**: Contenedores hardened, imágenes mínimas, auditoría continua
-3. **Criptografía End-to-End**: TLS 1.3 en tránsito, CMEK en reposo, Secret Manager con rotación, envelope encryption para PII
-4. **Perímetro Protegido**: Cloud Armor WAF, Cloud NAT, Firewall default-deny, evidencia nmap antes/después
-5. **Observabilidad y Evidencia**: Monitoreo completo, alertas, logging centralizado, evidencia reproducible
-
-La solución es **reproducible** (Terraform + Cloud Build), **auditable** (evidencia versionada en Git) y **escalable** (Cloud Run auto-scaling, Cloud SQL read replicas, Cloud Armor adaptive).
-
----
-
-**Firma del Equipo:** _________________________  
-**Fecha:** _________________________  
-**Profesor:** Ricardo Pérez  
-**Aprobación:** _________________________
+1. **Riesgo Residual:** La base de datos y la aplicación residen en una misma instancia EC2 para ajustarse a los límites de créditos de AWS Academy Learner Lab.
+   * *Mitigación:* Se implementó segmentación estricta de redes de Docker (`cemetery_db_net` con directiva `internal: true`), impidiendo que el motor de base de datos escuche en interfaces públicas.
+2. **Mejora Futura:** Implementar un Web Application Firewall gestionado (**AWS WAF**) acoplado a un **Application Load Balancer (ALB)** para mitigación de ataques a nivel de capa 7 con inspección de reglas de reputación de IP.

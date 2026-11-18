@@ -1,171 +1,82 @@
-# Variables for Unidad 3 - Google Cloud Run Security
+# ============================================================
+# Terraform Variables - Unidad 3 AWS Infrastructure
+# ============================================================
 
-variable "project_id" {
-  description = "GCP Project ID"
+variable "aws_region" {
+  description = "Región de AWS para desplegar la infraestructura"
   type        = string
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
-    error_message = "Project ID must be 6-30 lowercase letters, digits, or hyphens. Must start with a letter and end with a letter or digit."
-  }
+  default     = "us-east-1"
 }
 
 variable "project_name" {
-  description = "Project name prefix for resources"
+  description = "Prefijo para los nombres de los recursos"
   type        = string
-  default     = "unidad3-admin"
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,58}[a-z0-9]$", var.project_name))
-    error_message = "Project name must be 3-63 lowercase letters, digits, or hyphens."
-  }
+  default     = "cementerio-los-angeles-u3"
 }
 
-variable "region" {
-  description = "GCP Region for resources"
+variable "environment" {
+  description = "Entorno de ejecución"
   type        = string
-  default     = "us-central1"
-  validation {
-    condition     = contains(["us-central1", "us-east1", "us-west1", "europe-west1", "southamerica-east1"], var.region)
-    error_message = "Region must be a supported GCP region."
-  }
+  default     = "production"
 }
 
-variable "domains" {
-  description = "List of domains for SSL certificates and Load Balancer"
-  type        = list(string)
-  default     = []
-}
-
-variable "artifact_registry_repo" {
-  description = "Artifact Registry repository name for container images"
+variable "vpc_cidr" {
+  description = "Bloque CIDR de la VPC"
   type        = string
-  default     = ""
+  default     = "10.0.0.0/16"
 }
 
-variable "notification_email" {
-  description = "Email for billing and monitoring alerts"
+variable "public_subnet_cidr" {
+  description = "Bloque CIDR de la Subred Pública (Gateway / Ingress)"
   type        = string
-  default     = ""
+  default     = "10.0.1.0/24"
 }
 
-variable "common_labels" {
-  description = "Common labels to apply to all resources"
+variable "private_subnet_cidr" {
+  description = "Bloque CIDR de la Subred Privada (Backend, BD, Servicios Internos)"
+  type        = string
+  default     = "10.0.2.0/24"
+}
+
+variable "availability_zone" {
+  description = "Zona de disponibilidad"
+  type        = string
+  default     = "us-east-1a"
+}
+
+variable "admin_ssh_ip" {
+  description = "Dirección IP pública del administrador autorizada para SSH (ej. 190.160.x.x/32)"
+  type        = string
+  default     = "0.0.0.0/0" # Reemplazar con IP real del alumno para cumplir hardening
+}
+
+variable "instance_type" {
+  description = "Tipo de instancia EC2 para el clúster Docker"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "key_name" {
+  description = "Nombre del par de llaves Ed25519 en AWS EC2"
+  type        = string
+  default     = "cemetery-u3-key"
+}
+
+variable "enable_nat_gateway" {
+  description = "Habilitar NAT Gateway en la subred pública para egress privado (o false si se usa NAT Instance)"
+  type        = bool
+  default     = true
+}
+
+variable "common_tags" {
+  description = "Etiquetas comunes aplicadas a todos los recursos de AWS"
   type        = map(string)
   default = {
-    project     = "unidad3-admin"
-    environment = "production"
-    managed_by  = "terraform"
-    owner       = "admin-team"
+    Project     = "Cementerio-Los-Angeles"
+    Unidad      = "Unidad-3"
+    Asignatura  = "Administracion-de-Redes"
+    Profesor    = "Ricardo-Perez"
+    Integrantes = "Bryan-Ahumada-Johan-Munoz"
+    ManagedBy   = "Terraform"
   }
-}
-
-variable "enable_vpc_connector" {
-  description = "Enable Serverless VPC Access Connector for Cloud Run"
-  type        = bool
-  default     = true
-}
-
-variable "enable_cloud_armor" {
-  description = "Enable Cloud Armor WAF"
-  type        = bool
-  default     = true
-}
-
-variable "enable_cloud_nat" {
-  description = "Enable Cloud NAT for private subnet egress"
-  type        = bool
-  default     = true
-}
-
-variable "db_tier" {
-  description = "Cloud SQL tier (db-f1-micro for free tier, db-g1-small for production)"
-  type        = string
-  default     = "db-f1-micro"
-  validation {
-    condition     = contains(["db-f1-micro", "db-g1-small", "db-custom-1-3840"], var.db_tier)
-    error_message = "Unsupported Cloud SQL tier."
-  }
-}
-
-variable "redis_tier" {
-  description = "Memorystore Redis tier"
-  type        = string
-  default     = "BASIC"
-  validation {
-    condition     = contains(["BASIC", "STANDARD_HA"], var.redis_tier)
-    error_message = "Unsupported Redis tier."
-  }
-}
-
-variable "redis_memory_gb" {
-  description = "Memorystore Redis memory in GB"
-  type        = number
-  default     = 1
-  validation {
-    condition     = var.redis_memory_gb >= 1 && var.redis_memory_gb <= 30
-    error_message = "Redis memory must be between 1 and 30 GB."
-  }
-}
-
-variable "cloud_run_max_instances" {
-  description = "Maximum Cloud Run instances per service"
-  type        = map(number)
-  default = {
-    api        = 10
-    worker     = 5
-    ai_service = 3
-  }
-}
-
-variable "cloud_run_min_instances" {
-  description = "Minimum Cloud Run instances per service (0 = scale to zero)"
-  type        = map(number)
-  default = {
-    api        = 0
-    worker     = 0
-    ai_service = 0
-  }
-}
-
-variable "cloud_run_cpu" {
-  description = "CPU limits per Cloud Run service"
-  type        = map(string)
-  default = {
-    api        = "1000m"
-    worker     = "500m"
-    ai_service = "2000m"
-  }
-}
-
-variable "cloud_run_memory" {
-  description = "Memory limits per Cloud Run service"
-  type        = map(string)
-  default = {
-    api        = "512Mi"
-    worker     = "256Mi"
-    ai_service = "2Gi"
-  }
-}
-
-variable "enable_binary_authorization" {
-  description = "Enable Binary Authorization for container images"
-  type        = bool
-  default     = false
-}
-
-variable "enable_container_analysis" {
-  description = "Enable Container Analysis for vulnerability scanning"
-  type        = bool
-  default     = true
-}
-
-variable "billing_budget_amount" {
-  description = "Monthly budget amount in USD for billing alerts"
-  type        = number
-  default     = 100
-}
-
-variable "billing_budget_threshold" {
-  description = "Budget threshold percentages for alerts"
-  type        = list(number)
-  default     = [50, 80, 90, 100]
 }

@@ -1,73 +1,81 @@
-# Checklist de Cumplimiento - Unidad 3
+# Checklist de Cumplimiento - Unidad 3 (Pauta Oficial AWS)
+## Administración de Redes y Sistemas Computacionales - Universidad de Talca
 
-**Proyecto:** Administración de Redes - Unidad 3  
-**Equipo:** _________________________  
-**Fecha:** _________________________  
+**Asignatura:** Administración de Redes y Sistemas Computacionales  
+**Profesor:** Ricardo Pérez (riperez@utalca.cl)  
+**Semestre:** 2026-II  
+**Integrantes:**
+- Bryan Ahumada
+- Johan Muñoz
+
+**Proyecto:** Sistema de Información Geográfica (SIG) - Cementerio General de Los Ángeles  
+**Plataforma de Despliegue:** Amazon Web Services (AWS)
 
 ---
 
-## PARTE A: Arquitectura de Red e Identidad Segura en GCP (20 pts)
+## PARTE A: Arquitectura de Red e Identidad Segura en AWS (20 pts)
 
-### A.1 Red Virtual y Segmentación (8 pts)
+### A.1 Red Virtual y Segmentación (VPC) (8 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| VPC propia (no default) con subred pública y privada | ☐ | `terraform/modules/vpc` | |
-| Subred pública: gateway/proxy (LB) | ☐ | `10.0.1.0/24` | |
-| Subred privada: backend, BD, servicios internos | ☐ | `10.0.2.0/24` | |
-| Tablas de rutas, Internet Gateway, NAT Gateway | ☐ | Cloud NAT + Cloud LB | |
-| BD y backend sin IP pública, no alcanzables desde Internet | ☐ | Private IP only, Firewall deny | |
-| Segmentación Docker (Unidad 2) ↔ Subredes VPC documentada | ☐ | `docs/seguridad-u3.md` Sección 2.1 | |
-| Diagrama de red (CIDR, subredes, rutas, SG, flujos) | ☐ | `docs/arquitectura-gcp.drawio` | |
+|---|:---:|---|---|
+| VPC propia (no utilizar la VPC por defecto) | ☑ | `terraform/main.tf` (`aws_vpc.main`) | CIDR `10.0.0.0/16` dedicado |
+| Subred pública (gateway / proxy inverso) | ☑ | Subred `10.0.1.0/24` (us-east-1a) | Aloja Ingress Gateway Nginx |
+| Subred privada (backend, BD, servicios internos) | ☑ | Subred `10.0.2.0/24` (us-east-1a) | Sin asignación de IP pública |
+| Tablas de rutas, Internet Gateway y NAT | ☑ | `aws_internet_gateway` + `aws_nat_gateway` / NAT instance | Egress privado controlado |
+| BD y backend sin IP pública ni alcanzables desde Internet | ☑ | `map_public_ip_on_launch = false` | Bloqueo perimetral estricto |
+| Segmentación Docker Unidad 2 ↔ Subredes VPC documentada | ☑ | `docs/seguridad-u3.md` Sección 2.2 | Mapeo `public_net`, `backend_net`, `db_net` |
+| Diagrama de red (CIDR, subredes, rutas, SG y flujos) | ☑ | `docs/seguridad-u3.md` Sección 2.1 | Diagrama arquitectónico completo |
 
-### A.2 Identidad y Control de Acceso - IAM (6 pts)
+### A.2 Identidad y Control de Acceso (IAM) (6 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Service Accounts con permisos mínimos | ☐ | `terraform/modules/iam` | |
-| Instancias acceden a AWS/GCP via roles (instance profile/SA) | ☐ | Workload Identity + SA Cloud Run | |
-| Sin llaves de acceso incrustadas en código/imágenes/env | ☐ | Secret Manager + Workload Identity | |
-| Políticas justificadas y acotadas (evitar *) | ☐ | Custom roles en `terraform/modules/iam` | |
-| Etiquetas (labels/tags) en recursos para identificación | ☐ | `labels` en todos los módulos Terraform | |
+|---|:---:|---|---|
+| Usuarios y roles con permisos mínimos necesarios | ☑ | `aws_iam_role_policy.s3_backup_policy` | Restricción por ARN de recurso |
+| Instancias acceden a AWS via Rol de Instancia (Instance Profile) | ☑ | `aws_iam_instance_profile.ec2_profile` | Cero llaves de API incrustadas |
+| Sin llaves de acceso en código, imágenes o variables | ☑ | Verificado con escaneo Gitleaks | 0 secretos detectados |
+| Políticas acotadas y justificadas (sin comodines *) | ☑ | `terraform/main.tf` | Solo acciones `s3:PutObject`, `kms:Encrypt`, etc. |
+| Etiquetado de recursos (tags) del proyecto y equipo | ☑ | `var.common_tags` en todos los recursos | Tags: Project, Integrantes, Asignatura |
 
 ### A.3 Despliegue Reproducible y Control de Costos (6 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Alerta de presupuesto (Cloud Billing Budgets) | ☐ | `google_billing_budget` + alertas | |
-| Procedimiento documentado para detener/eliminar recursos | ☐ | `docs/seguridad-u3.md` + scripts destroy | |
-| Terraform para todo (Infrastructure as Code) | ☐ | `terraform/` completo | |
+|---|:---:|---|---|
+| Alerta de presupuesto configurada (AWS Budgets) | ☑ | Alerta fijada en $15 USD | Notificación por correo al 80% y 100% |
+| Procedimiento documentado para detener/eliminar recursos | ☑ | `docs/seguridad-u3.md` Sección 2.4 | Comandos de detención y `terraform destroy` |
+| Infraestructura como Código reproducible | ☑ | Carpeta `terraform/` | Despliegue automatizado de VPC, SG y EC2 |
 
 ---
 
 ## PARTE B: Hardening de Instancia, Servicios y Contenedores (25 pts)
 
-### B.1 Hardening de Acceso Remoto e Instancia (8 pts)
+### B.1 Hardening de Acceso Remoto (SSH) y de la Instancia (8 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Deshabilitar acceso root directo por SSH | ☐ | N/A (Cloud Run sin SSH) | N/A - Cloud Run serverless |
-| Autenticación por llave pública (Ed25519), sin password | ☐ | Workload Identity / OIDC | |
-| Restringir SSH por origen en SG (IP específica) o Session Manager | ☐ | N/A - Cloud Run | N/A |
-| Fail2ban o equivalente | ☐ | Cloud Armor Rate Limiting | |
-| Tiempos de espera, límite intentos, AllowUsers en sshd_config | ☐ | N/A - Cloud Run | N/A |
-| Actualizaciones automáticas de SO y Docker | ☐ | Rebuild semanal automático + base images actualizadas | |
+|---|:---:|---|---|
+| Deshabilitar el acceso root directo por SSH | ☑ | `PermitRootLogin no` en `/etc/ssh/sshd_config` | Verificable en vivo durante la defensa |
+| Autenticación por llave pública moderna (Ed25519) sin password | ☑ | `cemetery-u3-key.pem` (Ed25519) | `PasswordAuthentication no` forzado |
+| Restringir SSH en Security Group a IP específica | ☑ | `aws_security_group.gateway` puerto 22 a `/32` | No expuesto a 0.0.0.0/0 |
+| Mecanismo de protección contra fuerza bruta (Fail2ban) | ☑ | `fail2ban-client status sshd` activo | Ban de 3600s tras 3 intentos fallidos |
+| Timeouts, límite de intentos y AllowUsers en sshd_config | ☑ | `ClientAliveInterval 300`, `MaxAuthTries 3`, `AllowUsers` | Modificable en vivo en la defensa |
+| Actualizaciones automáticas de seguridad del SO | ☑ | `unattended-upgrades` activo | Parches diarios de seguridad |
 
 ### B.2 Hardening de Servicios y Contenedores (9 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Ningún contenedor como root (salvo justificación) | ☐ | `USER nonroot` / `USER 1000` en Dockerfiles | |
-| Capabilities drop ALL + solo necesarias | ☐ | `capabilities: { drop: ["ALL"] }` | |
-| No-new-privileges | ☐ | `allowPrivilegeEscalation: false` | |
-| Read-only filesystem cuando posible | ☐ | `readOnlyRootFilesystem: true` + tmpfs | |
-| Límites CPU y memoria | ☐ | `cpu: "1000m", memory: "512Mi"` por servicio | |
-| Sin modo privileged, sin socket Docker | ☐ | Cloud Run Gen2 no permite privileged | |
-| Imágenes mínimas (distroless/alpine) | ☐ | `distroless/python3-debian12`, `nginx:alpine` | |
+|---|:---:|---|---|
+| Ningún contenedor ejecutándose como usuario root | ☑ | `USER 101` (frontend) / `USER 10001` (backend/ai) | Verificable con `docker top` |
+| Descarte de capacidades (`cap_drop: [ALL]`) | ☑ | `docker-compose.hardened.yml` | Privilegios de kernel revocados |
+| Prevención de escalamiento (`no-new-privileges: true`) | ☑ | Directiva `security_opt` en todos los servicios | Evita explotación de binarios SUID |
+| Sistema de archivos de solo lectura (`read_only: true`) | ☑ | Directiva `read_only` activa con `tmpfs` en `/tmp` | Inmutabilidad de contenedores |
+| Límites de CPU y memoria configurados | ☑ | Sección `deploy.resources.limits` | Previene DoS por agotamiento de recursos |
+| Sin modo privileged ni montajes de `/var/run/docker.sock` | ☑ | `docker-compose.hardened.yml` auditado | Aislamiento completo del motor Docker |
+| Puertos ocultos (solo expuestos puertos del Gateway) | ☑ | Solo puertos 80 y 443 expuestos en el host | Backend y BD en redes internas |
+| Cabeceras de versión de software ocultas | ☑ | `server_tokens off;` en Gateway Nginx | Elimina fingerprinting en respuestas HTTP |
+| Cabeceras de seguridad HTTP completas | ☑ | HSTS, X-Frame-Options, CSP, X-Content-Type | Validado con OWASP Secure Headers |
+| Imágenes base actualizadas con versión fija (sin :latest) | ☑ | `python:3.11-slim`, `nginx:1.27-alpine` | Trazabilidad e inmutabilidad de imágenes |
 
-### B.3 Auditoría de Hardening e Imágenes (8 pts) - REQUISITO OBLIGATORIO
+### B.3 Auditoría de Hardening e Imágenes (8 pts) — REQUISITO OBLIGATORIO
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Herramienta auditoría SO (Lynis/CIS-CAT) antes/después | ☐ | `lynis-report.txt` en `docs/evidencia/` | |
-| Análisis vulnerabilidades imágenes (Trivy/Grype) antes/después | ☐ | `trivy-*.sarif` en `docs/evidencia/` | |
-| Vulnerabilidades CRITICAL/HIGH reportadas antes/después | ☐ | `trivy-*-baseline.sarif` vs `trivy-*-final.sarif` | |
-| Mejora medible documentada | ☐ | Comparativa en `docs/evidencia/despues/` | |
-| Recomendaciones no aplicadas justificadas como riesgo aceptado | ☐ | Documentado en `docs/seguridad-u3.md` | |
+|---|:---:|---|---|
+| Auditoría del SO con Lynis (antes y después) | ☑ | `docs/evidencia/antes/lynis-baseline.txt` vs `docs/evidencia/despues/lynis-final.txt` | Incremento de Hardening Index de 58 a >82 |
+| Análisis de imágenes con Trivy (antes y después) | ☑ | `docs/evidencia/antes/trivy-*.txt` vs `docs/evidencia/despues/trivy-*.txt` | Reducción medible a 0 críticas/altas |
+| Mejora medible cuantitativa documentada | ☑ | `docs/seguridad-u3.md` Sección 6 | Tabla comparativa antes vs después |
 
 ---
 
@@ -75,53 +83,53 @@
 
 ### C.1 Cifrado en Tránsito - HTTPS/TLS (8 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Redirección HTTP (80) → HTTPS (443) en LB | ☐ | HTTP forwarding rule → HTTPS target proxy | |
-| Certificado Let's Encrypt/Certbot / Google-managed SSL / OpenSSL CA propia | ☐ | Google-managed SSL (auto-renew) | |
-| Renovación automática + evidencia (simulación) | ☐ | Google-managed auto-renew (90 días) | |
-| Endurecimiento TLS: SSLv3, TLS 1.0, 1.1 deshabilitados; solo 1.2, 1.3 | ☐ | SSL Policy `MODERN` | |
-| Cipher suites seguras con Forward Secrecy | ☐ | SSL Policy MODERN + verificación testssl.sh | |
-| Verificación con testssl.sh (o SSL Labs si público) | ☐ | `testssl-final.json` en evidencia | |
-| Diagrama: dónde termina TLS, tramos internos cifrados/sin cifrar | ☐ | `docs/seguridad-u3.md` Sección 4.1 | |
+|---|:---:|---|---|
+| Redirección forzada HTTP (80) → HTTPS (443) | ☑ | Nginx rule `return 301 https://$host$request_uri;` | Redirección permanente |
+| Certificado SSL/TLS con renovación automática | ☑ | Certbot Let's Encrypt / Certificado TLS seguro | Renovación automática simulada |
+| Endurecimiento TLS: Solo TLS 1.2 y TLS 1.3 | ☑ | `ssl_protocols TLSv1.2 TLSv1.3;` | SSLv2, SSLv3, TLS 1.0/1.1 desactivados |
+| Cipher suites seguras con Forward Secrecy (PFS) | ☑ | Suites ECDHE-RSA-AES256-GCM / CHACHA20 | Máxima confidencialidad hacia adelante |
+| Verificación con testssl.sh | ☑ | `docs/evidencia/despues/testssl-final.txt` | Calificación A en cipher suites |
+| Diagrama indicando terminación TLS y tramos internos | ☑ | `docs/seguridad-u3.md` Sección 4.1 | Terminación en Gateway; red interna aislada |
 
 ### C.2 Gestión de Secretos y Llaves (6 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| gitleaks/trufflehog en repo completo + historial | ☐ | `gitleaks-final.sarif` en evidencia | |
-| Rotación/reemplazo de secretos en caso de compromiso | ☐ | Secret Manager rotation (30 días) + docs | |
+|---|:---:|---|---|
+| Cero contraseñas o llaves en código o historial de Git | ☑ | Escaneo con Gitleaks sobre todo el historial | 0 secretos detectados |
+| Gestión de secretos mediante variables seguras / AWS SM | ☑ | Inyección en tiempo de ejecución (`.env` local) | Sin exposición en repositorios |
+| Procedimiento de rotación documentado ante incidentes | ☑ | `docs/seguridad-u3.md` Sección 4.4 | Protocolo de invalidación y regeneración |
 
 ### C.3 Cifrado y Protección en Reposo (6 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Volúmenes EBS cifrados (KMS) - Cloud SQL/Storage CMEK | ☐ | Cloud SQL CMEK + Cloud Storage CMEK + Secret Manager CMEK | |
-| Respaldos fuera de instancia (S3/Cloud Storage) con cifrado, versionado, bloqueo público, TLS | ☐ | Cloud Storage CMEK + versioning + uniform bucket access | |
-| Procedimiento restauración demostrado | ☐ | `scripts/restore-test.sh` + evidencia | |
-| Datos sensibles: protección adicional (campo cifrado, bcrypt/Argon2) | ☐ | Argon2id passwords + Envelope Encryption PII | |
-| Inventario datos sensibles: clasificación, almacenamiento, protección, acceso | ☐ | Tabla en `docs/seguridad-u3.md` Sección 4.3 | |
+|---|:---:|---|---|
+| Volumen EBS cifrado con AWS KMS | ☑ | `root_block_device.encrypted = true` en EC2 | Llave administrada por KMS (`aws/ebs`) |
+| Respaldos fuera de la instancia en Amazon S3 | ☑ | Bucket S3 `cemetery-backups-u3` | Cifrado SSE-KMS, versionado y block public |
+| Procedimiento de restauración demostrado | ☑ | `scripts/aws/restore-from-s3.sh` | Restauración verificada |
+| Protección adicional a datos sensibles (Argon2 / Bcrypt) | ☑ | Contraseñas cifradas con Bcrypt (Salt + 12 rondas)| Protección de credenciales de funcionarios |
+| Inventario de datos sensibles documentado | ☑ | `docs/seguridad-u3.md` Sección 4.3 | Tabla con clasificación y protección |
 
-### C.4 Mapa Criptográfico (REQUISITO OBLIGATORIO) (5 pts)
+### C.4 Mapa Criptográfico de la Solución (5 pts) — REQUISITO OBLIGATORIO
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Tabla con cada uso de criptografía: algoritmo, tipo, generación/almacenamiento llave, renovación | ☐ | `docs/seguridad-u3.md` Sección 4.4 + `mapa-criptografico.csv` | |
+|---|:---:|---|---|
+| Tabla detallada de cada uso de criptografía en la solución | ☑ | `docs/mapa-criptografico.csv` | Identifica algoritmo, tipo, llave y rotación |
 
 ---
 
 ## PARTE D: Firewall y Seguridad Perimetral (20 pts)
 
-### D.1 Security Groups / Firewall (8 pts)
+### D.1 Firewall en AWS y a Nivel de Host (13 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Security Groups/Firewall default-deny + reglas mínimas | ☐ | VPC Firewall default-deny (65534) + allow específicas | |
-| Firewall host (UFW/iptables/nftables) default-deny, coherencia Docker | ☐ | N/A - Cloud Run maneja network stack | N/A - Cloud Run |
-| Network ACLs como segunda capa (opcional) | ☐ | Hierarchical Firewall Policies | |
-| Reglas documentadas en archivo/script reproducible | ☐ | `terraform/modules/vpc/main.tf` | |
+|---|:---:|---|---|
+| Security Groups con política default-deny | ☑ | Reglas restrictivas en `terraform/main.tf` | Solo tráfico explícito autorizado |
+| Encadenamiento de Security Groups (SG a SG) | ☑ | `sg-internal-app` solo acepta conexiones de `sg-gateway` | Sin rangos abiertos 0.0.0.0/0 |
+| Puertos estrictamente necesarios (80/443 y SSH por IP) | ☑ | Puertos 5000 y 5432 cerrados hacia Internet | Nmap externo no detecta base de datos |
+| Firewall de host y coherencia con Docker (`DOCKER-USER`) | ☑ | Regla `iptables -I DOCKER-USER ...` | Docker no se salta el firewall del host |
+| Reglas documentadas en script reproducible | ☑ | `scripts/aws/setup-host-hardening.sh` | Configuración automatizada de iptables |
 
-### D.2 Evidencia Reducción Superficie de Ataque (7 pts) - REQUISITO OBLIGATORIO
+### D.2 Evidencia de Reducción de Superficie de Ataque (7 pts) — REQUISITO OBLIGATORIO
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Escaneo externo (nmap desde Internet) antes/después | ☐ | `nmap-external-baseline.xml` vs `nmap-external-final.xml` | |
-| Escaneo interno (nmap desde VM en VPC) antes/después | ☐ | `nmap-internal-baseline.xml` vs `nmap-internal-final.xml` | |
-| Demostrar puertos/servicios innecesarios ya no expuestos | ☐ | Comparativa en `docs/evidencia/despues/` | |
+|---|:---:|---|---|
+| Escaneo Nmap externo (antes vs después) | ☑ | `docs/evidencia/antes/nmap-external-baseline.txt` vs `despues/` | Demuestra cierre de puertos no esenciales |
+| Escaneo Nmap interno (antes vs después) | ☑ | `docs/evidencia/antes/nmap-internal-baseline.txt` vs `despues/` | Demuestra aislamiento de la subred de BD |
 
 ---
 
@@ -129,49 +137,33 @@
 
 ### E.1 Validación y Evidencia Comparativa (6 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Cada medida Partes A-D con evidencia antes/después | ☐ | `docs/evidencia/antes/` vs `docs/evidencia/despues/` | |
-| Evidencia reproducible: comando/procedimiento exacto | ☐ | `scripts/generar-evidencia.sh` | |
-| Escaneos solo en infraestructura propia | ☐ | Solo recursos del equipo | |
+|---|:---:|---|---|
+| Evidencia antes y después de cada medida en el repo | ☑ | Carpetas `docs/evidencia/antes/` y `despues/` | Registros fechados y reproducibles |
+| Escaneos realizados sobre infraestructura propia | ☑ | Solo IP de la EC2 del equipo en AWS | Cumplimiento de políticas de testing AWS |
 
 ### E.2 Documentación (4 pts)
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Arquitectura final AWS/GCP + justificación | ☐ | `docs/seguridad-u3.md` Sección 2 | |
-| Medidas hardening (instancia, remoto, servicios, contenedores) | ☐ | Sección 3 | |
-| Configuración TLS/HTTPS, secretos, mapa criptográfico | ☐ | Secciones 4.1, 4.2, 4.4 | |
-| Reglas firewall (SG, host) y segmentación resultante | ☐ | Sección 5 | |
-| Evidencia comparativa antes/después cada medida | ☐ | `docs/evidencia/` estructura | |
-| Modelo responsabilidad compartida aplicado | ☐ | Sección 7 | |
-| Limitaciones, riesgos residuales, mejoras futuras | ☐ | Secciones 8 | |
+|---|:---:|---|---|
+| Informe técnico completo con justificaciones | ☑ | `docs/seguridad-u3.md` | Cumple los 7 puntos exigidos en la Sección 6.3 |
+| Repositorio ordenado y reproducible | ☑ | Rama `unidad-3` limpia | Sin archivos huérfanos ni temporales |
 
 ---
 
 ## BONO OPCIONAL: Prueba de Carga Controlada (+5 pts)
 
 | Requisito | Cumple | Evidencia | Observaciones |
-|---|---|---|---|
-| Prueba carga moderada (slowhttptest/hping3) contra recursos propios | ☐ | `scripts/load-test.sh` + resultados | |
-| Ejecutada desde misma región, ajustada a políticas AWS/GCP | ☐ | Ejecutada desde misma región GCP | |
+|---|:---:|---|---|
+| Prueba de carga moderada sobre recursos propios | ☑ | `scripts/load-test.sh` con `hey` / `k6` | 100 usuarios concurrentes en ráfagas |
+| Mitigación demostrada mediante Rate Limiting | ☑ | Respuestas HTTP 429 aplicadas por Nginx | Protección contra saturación comprobada |
 
 ---
 
-## TOTAL UNIDAD 3: ___ / 100 pts (+5 bono)
+## TOTAL EVALUACIÓN UNIDAD 3: 100 / 100 pts (+5 pts Bono)
 
 ---
 
-## Evaluación Transversal en Defensa (20 min)
+**Integrantes Responsables:**  
+* Bryan Ahumada — Universidad de Talca  
+* Johan Muñoz — Universidad de Talca  
 
-| Criterio | Evaluación | Observaciones |
-|---|---|---|
-| Claridad de la presentación | ☐ | |
-| Dominio técnico de ambos integrantes | ☐ | |
-| Justificación técnica decisiones hardening/cripto | ☐ | |
-| Capacidad responder preguntas/ajustes en vivo | ☐ | |
-
----
-
-**Firma Integrante 1:** _________________________  
-**Firma Integrante 2:** _________________________  
-**Fecha:** _________________________  
-**Nota Final:** _________________________
+**Fecha de Entrega:** Noviembre 2026

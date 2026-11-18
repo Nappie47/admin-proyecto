@@ -1,0 +1,236 @@
+# ==============================================================================
+# Docker Compose Hardened - Unidad 3 AWS EC2 Deployment
+# Hardening de Contenedores, Mínimo Privilegio y Segmentación de Redes
+# Autores: Bryan Ahumada - Johan Muñoz
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # 1. GATEWAY INGRESS L7 (Nginx Hardened con TLS 1.3 y Cabeceras de Seguridad)
+  # ============================================================================
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: cemetery_gateway_hardened
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - certbot_www:/var/www/certbot:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/run:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=64m
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "curl", "-kfs", "https://localhost/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - public_net
+      - backend_net
+    depends_on:
+      - frontend
+      - backend
+      - ai-service
+
+  # ============================================================================
+  # 2. FRONTEND SPA (React 18 + Vite + Leaflet en Nginx No Privilegiado)
+  # ============================================================================
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+    image: cemetery_frontend:u3-hardened
+    container_name: cemetery_frontend_hardened
+    restart: unless-stopped
+    user: "101:101" # Usuario no root nginx
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/run:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=64m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - backend_net
+
+  # ============================================================================
+  # 3. BACKEND CORE REST API (Flask + SQLAlchemy + PostGIS + WebSockets)
+  # ============================================================================
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    image: cemetery_backend:u3-hardened
+    container_name: cemetery_backend_hardened
+    restart: unless-stopped
+    user: "10001:10001" # Usuario no root appuser
+    environment:
+      - FLASK_ENV=production
+      - PORT=5000
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DATABASE_URL=postgresql://${DB_USER:-cemetery_admin}:${DB_PASSWORD:-SecretPassword2026!}@db:5432/${DB_NAME:-cementerio_db}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /app/instance:rw,noexec,nosuid,size=32m
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - backend_net
+      - db_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ============================================================================
+  # 4. MICROSERVICIO DE IA BIOMÉTRICA (OpenCV + Detección Facial)
+  # ============================================================================
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    image: cemetery_ai_service:u3-hardened
+    container_name: cemetery_ai_hardened
+    restart: unless-stopped
+    user: "10001:10001" # Usuario no root appuser
+    environment:
+      - PORT=5001
+      - AI_DATA_DIR=/app/data/faces
+    volumes:
+      - ai_data_volume:/app/data/faces
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - backend_net
+
+  # ============================================================================
+  # 5. BASE DE DATOS GEOESPACIAL (PostgreSQL 16 + PostGIS 3.4 - Red Aislada)
+  # ============================================================================
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: cemetery_db_hardened
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-cementerio_db}
+      - POSTGRES_USER=${DB_USER:-cemetery_admin}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-SecretPassword2026!}
+    volumes:
+      - pgdata_volume:/var/lib/postgresql/data
+      - ./infrastructure/database/init:/docker-entrypoint-initdb.d:ro
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cemetery_admin} -d ${DB_NAME:-cementerio_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - db_net
+
+# ==============================================================================
+# SEGMENTACIÓN DE REDES DOCKER (Correspondencia con la VPC de AWS)
+# ==============================================================================
+networks:
+  public_net:
+    driver: bridge
+    name: cemetery_public_net
+  backend_net:
+    driver: bridge
+    name: cemetery_backend_net
+    internal: false
+  db_net:
+    driver: bridge
+    name: cemetery_db_net
+    internal: true # AISLAMIENTO TOTAL: Sin acceso a Internet ni a la red publica
+
+# ==============================================================================
+# VOLÚMENES NOMBRADOS CON PERSISTENCIA DESACOPLADA
+# ==============================================================================
+volumes:
+  pgdata_volume:
+    name: cemetery_pgdata_u3
+  ai_data_volume:
+    name: cemetery_ai_faces_u3
+  certbot_www:
+    name: cemetery_certbot_www

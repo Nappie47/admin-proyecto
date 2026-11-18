@@ -1,73 +1,53 @@
 # ============================================================
-# Dockerfile API - Hardened para Cloud Run
-# Multi-stage build con imagen base distroless/alpine
+# Dockerfile API - Hardened para AWS EC2
+# Multi-stage build con imagen segura no-root
+# Autores: Bryan Ahumada & Johan Muñoz
 # ============================================================
 
-# ============================================================
-# STAGE 1: Builder - Compilar dependencias
-# ============================================================
-FROM python:3.11-alpine AS builder
-
-# Instalar dependencias de build
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    libffi-dev \
-    openssl-dev \
-    cargo \
-    postgresql-dev
-
-# Crear usuario no-root para build
-RUN addgroup -g 1000 -S appgroup && \
-    adduser -u 1000 -S appuser -G appgroup
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Copiar requirements primero (cache layer)
-COPY requirements.txt .
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Instalar dependencias Python en directorio virtual
+COPY services/backend/requirements.txt .
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# ============================================================
-# STAGE 2: Runtime - Imagen mínima distroless
-# ============================================================
-FROM gcr.io/distroless/python3-debian12:nonroot
+# Runtime stage
+FROM python:3.11-slim
 
-# Metadata
-LABEL maintainer="Equipo Unidad 3 - Administración de Redes" \
-      version="1.0.0" \
-      description="API Service - Hardened para Cloud Run" \
-      org.opencontainers.image.source="https://github.com/tu-org/tu-repo" \
-      org.opencontainers.image.documentation="https://github.com/tu-org/tu-repo/blob/main/docs/seguridad-u3.md" \
-      org.opencontainers.image.licenses="MIT"
+LABEL maintainer="Bryan Ahumada & Johan Muñoz" \
+      version="3.0.0" \
+      description="API Service Hardened para AWS - Unidad 3"
 
-# Copiar virtualenv del builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Usuario no root seguro
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -s /sbin/nologin -d /app appuser
+
 COPY --from=builder /opt/venv /opt/venv
-
-# Copiar código de la aplicación
-COPY --chown=nonroot:nonroot app/ /app/
+COPY --chown=appuser:appgroup services/backend /app
 
 WORKDIR /app
+USER appuser
 
-# Variables de entorno
 ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    ENVIRONMENT=production
+    FLASK_ENV=production
 
-# Puerto (Cloud Run usa 8080 por defecto)
-EXPOSE 8080
+EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+HEALTHCHECK --interval=20s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://127.0.0.1:5000/api/health || exit 1
 
-# Usuario no-root (ya viene en distroless nonroot)
-USER nonroot:nonroot
-
-# Comando de inicio
-ENTRYPOINT ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["./entrypoint.sh"]
